@@ -57,7 +57,7 @@ library(janitor)
 
 # 1. CONFIGURACIÓN DE RUTAS
 #C:\Users\luisa\OneDrive\Desktop\sup_PEDRIVE\PAU_altas_txt
-path_proyecto <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/PAU_altas_txt/" # donde estan los archivos grandotes .txt 
+path_proyecto <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/PAU_altas_txt/de drive como txt/" # donde estan los archivos grandotes .txt 
 path_pacientes <- file.path(path_proyecto, "Pacientes")
 path_excluidos <- file.path(path_pacientes, "Excluidos")
 
@@ -65,8 +65,7 @@ path_excluidos <- file.path(path_pacientes, "Excluidos")
 if (!dir.exists(path_pacientes)) dir.create(path_pacientes, recursive = TRUE)
 if (!dir.exists(path_excluidos)) dir.create(path_excluidos, recursive = TRUE)
 
-# 2. LISTAR ARCHIVOS DEL PENDRIVE (Ej: 3300.txt, 3400.txt...). El patrón busca archivos que empiecen con 4 dígitos y sean .txt
-# archivos_pendrive <- list.files(path = path_proyecto, pattern = "^\\d{4}.*\\.txt$", full.names = TRUE)
+# 2. LISTAR ARCHIVOS DEL PENDRIVE que sean .txt
 archivos_pendrive <- list.files(path = path_proyecto, pattern = "\\.txt$", full.names = TRUE)
 
 # 1. Extraer solo el nombre (ej: "3300.txt") de la ruta completa para luego documentar
@@ -88,17 +87,8 @@ for (archivo_txt in archivos_pendrive) {
 
   df_segmentado <- temp_data %>%
     mutate(
-        # EXPLICACIÓN DE LA REGEX:
-        # ^\\d{4}       : Comienza con 4 dígitos (Cama/ID).
-        # \\s*[-]?\\s*  : Espacios y guion opcionales.
-        # [A-Za-z]      : Sigue con al menos una letra (Nombre).
-        # .*            : Cualquier texto intermedio.
-        # (\\(\\d+\\))? : Un paréntesis con números (Edad) que puede estar o no (?).
-
-        es_inicio = str_detect(X1, "^\\d{4}\\s*[-]?\\s*[A-Za-z].*(\\(\\d+\\))?"),
-
-       # 2. ID secuencial único: Cada paciente tendrá su propio número del 1 al 256
-        id_paciente_unico = cumsum(es_inicio)
+        es_inicio = str_detect(X1, "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ\\s]+\\s*(\\(\\d+\\)|\\d{1,2})?"),         #(?:.*?DNI)),   # \\s+(\\d+)(?:años)?\\s*(.*)$"),    # previo "^\\d{4}\\s*[-]?\\s*[A-Za-z].*(\\(\\d+\\))?"),
+        id_paciente_unico = cumsum(es_inicio) # 2. ID secuencial único: Cada paciente tendrá su propio número del 1 al 256
       ) %>%
       filter(id_paciente_unico > 0) %>%
       group_by(id_paciente_unico) %>%
@@ -128,6 +118,10 @@ for (archivo_txt in archivos_pendrive) {
   message(paste("Segmentado y guardado:", basename(archivo_txt)))
 }
 
+
+
+
+
 # --- INICIO DEL PROCESO DE EVALUACIÓN de cada archivo-paciente ---
 
 # Ahora listamos los archivos individuales generados en la carpeta local:Solo archivos .txt, ignorando carpetas (si existe ya la de Excluidos)
@@ -149,36 +143,81 @@ for (p in pacientes) {
   # --- Extracción de edad, nombre de primera linea 
   linea_1 <- contenido[1]
   
-  edad <- linea_1 %>% 
-    str_extract("(?<=\\().*?(?=\\))") %>% # Capturar el contenido literal entre los paréntesis
-    str_remove_all("\\D") %>%  # con //D eliminar todo lo que NO sea un dígito 
-    as.numeric() # Convertir a numérico
+  edad_raw <- linea_1 %>% 
+    str_remove("^\\d{4}\\s*[-]?\\s*") %>%
+    str_remove("\\s*[-]?\\s*.") %>% 
+    str_extract("(?i)(\\(\\s*(edad\\s*)?\\d[\\s\\d]{1,3}(.*?)\\)|\\bedad[:\\s]*\\d[\\s\\d]{1,3}\\b|\\b\\d[\\s\\d]{1,3}\\s*(años?|ños|a|(?=\\s*-?DNI|\\s*-?HC|$)))")
+   
+   # [\\s\\d]{1,3} capturar números que tienen espacios locos en medio
+   #  detectará la edad  antes de "DNI", y sino también antes de palabras como "años", "HC" o simplemente antes de una letra.
+
+
+  # 2. Limpiamos solo los números y convertimos de forma segura
+  edad <- if (!is.na(edad_raw)) {
+    as.numeric(str_remove_all(edad_raw, "[^0-9]")) 
+  } else {NA_real_}
   
-  nombre_paciente <- linea_1 %>% 
-    str_remove("^\\d{4}\\s*[-]?\\s*") %>%  # Quitar los 4 dígitos iniciales, espacios y el guion opcional
-    str_remove("\\s*\\(.*?\\).*$") %>%  # Quitar el paréntesis con la edad y cualquier cosa que siga
-    str_trim()  %>% # Limpiar espacios sobrantes a los lados
+  nombre_paciente <- linea_1 %>%
+    str_replace("^\\d{4}\\s*[-]?\\s*", "") %>%  # Eliminamos los 4 dígitos iniciales y cualquier guion/espacio que les siga
+    str_extract("(?i)^.*?(?=\\s*\\(\\s*(edad|\\d+)|\\s+edad|\\s+\\d+|\\s*(DNI|HC|FI)|$)") %>% 
+    str_replace(("-"), "") %>% # sacar comas flotando por ahi y que separen nombres
+    str_replace((","), "") %>% 
+    str_trim() %>%
     toupper()
-  
+
   # Verificación para el log:
   if (is.na(nombre_paciente) || nombre_paciente == "") {
     nombre_paciente <- "Nombre_No_Detectado"
   }  
-  # --- Extraccion de dni, hc, fechas de internacion del bloque clinico
-  bloque_clinico <- paste(contenido[2:min(5, length(contenido))], collapse = " ")
   
-  extraer_flexible <- function(texto, etiqueta) {
-    pattern <- if (etiqueta %in% c("DNI:", "HC:")) paste0(etiqueta, "\\s*(\\d+)") else
-      if (etiqueta %in% c("FI:", "FICM:")) paste0(etiqueta, "\\s*([\\d/]+)") else
-        paste0(etiqueta, "\\s*([^\\s]+)")
-    match <- str_match(texto, pattern)
-    if (!is.na(match[1,2])) return(str_trim(match[1,2])) else return(NA_character_)
+  #######
+  
+  
+  # Definir la función fuera del loop para mayor eficiencia
+  extraer_dato_clinico <- function(texto, etiqueta) {
+    # (?i)          : No distingue mayúsculas/minúsculas
+    # [:\\s]*       : Acepta ":" y espacios (opcionales) entre etiqueta y valor
+    # ([\\d/\\.]+)  : Captura números, barras (fechas) y puntos (nros HC complejos)
+    # (?=\\s*(DNI|HC|FI|FICM|,|-|\\s|$)) : Lookahead para frenar en la siguiente etiqueta o signo
+    
+    patron <- paste0("(?i)", etiqueta, "[:\\s]*([\\d/\\.]+)")
+    match <- str_match(texto, patron)
+    
+    if (!is.na(match[1, 2])) {
+      return(str_trim(match[1, 2]))
+    } else {
+      return(NA_character_)
+    }
   }
   
-  dni_v <- extraer_flexible(bloque_clinico, "DNI:")
-  hc_v  <- extraer_flexible(bloque_clinico, "HC:")
-  fi_v  <- extraer_flexible(bloque_clinico, "FI:")
-  ficm_v <- extraer_flexible(bloque_clinico, "FICM:")
+  
+  # --- Extraccion de dni, hc, fechas de internacion del bloque clinico
+  #bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
+  #
+  # extraer_flexible <- function(texto, etiqueta) {
+  #   pattern <- if (etiqueta %in% c("DNI:", "HC:")) paste0(etiqueta, "\\s*(\\d+)") else
+  #     if (etiqueta %in% c("FI:", "FICM:")) paste0(etiqueta, "\\s*([\\d/]+)") else
+  #       paste0(etiqueta, "\\s*([^\\s]+)")
+  #   match <- str_match(texto, pattern)
+  #   if (!is.na(match[1,2])) return(str_trim(match[1,2])) else return(NA_character_)
+  # }
+  # 
+  # dni_v <- extraer_flexible(bloque_clinico, "DNI:")
+  # hc_v  <- extraer_flexible(bloque_clinico, "HC:")
+  # fi_v  <- extraer_flexible(bloque_clinico, "FI:")
+  # ficm_v <- extraer_flexible(bloque_clinico, "FICM:")
+  # 
+  
+  # Unificamos el bloque de búsqueda (Líneas 1 a 5)
+  bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
+  
+  # Captura de variables con la nueva lógica
+  dni_v  <- extraer_dato_clinico(bloque_clinico, "DNI")
+  hc_v   <- extraer_dato_clinico(bloque_clinico, "HC")
+  fi_v   <- extraer_dato_clinico(bloque_clinico, "FI")     # Capturará fechas como 25/01/2026
+  ficm_v <- extraer_dato_clinico(bloque_clinico, "FICM")
+  
+  
   
   # --- Detectar criterios clinicos de Exclusión ---
   texto_completo <- tolower(paste(contenido, collapse = " "))
@@ -225,17 +264,15 @@ for (p in pacientes) {
   }
   
   # LÓGICA DE CLASIFICACIÓN: comentarios por criterio de exclusion ---
-  comentario <- NULL
-  if (!is.na(edad) && edad < 18) {
-    comentario <- "< 18 años"
-  } else if (!is.na(hallazgo_normalizado)) {
-    comentario <- paste(hallazgo_normalizado)
-  } else if (!is.na(hb_inicial) && hb_inicial < 12.0) {
-    comentario <- paste("anemia basal")
-  } else if (!is.na(hb_inicial) && hb_inicial >= 12.0 && hb_inicial <13) {
-    comentario <- "evaluar sexo"
-  }
-  
+
+  comentario <- case_when(
+    !is.na(edad) && edad < 18                  ~ "< 18 años",
+    !is.na(hallazgo_normalizado)               ~ hallazgo_normalizado,
+    !is.na(hb_inicial) && hb_inicial < 12.0    ~ "anemia basal",
+    !is.na(hb_inicial) && hb_inicial >= 12.0 && hb_inicial < 13 ~ "evaluar sexo",
+    is.na(hb_inicial)                          ~ "falta hb inicial",
+    TRUE                                       ~ "apto"
+  )
   
   # --- GUARDAR TODO EN TABLA
   registro_inicial[[p]] <- tibble(
@@ -304,11 +341,11 @@ tabla_3 <- tabla_2 %>%
     # Usamos case_when para múltiples condiciones vectorizadas
     comentario = case_when(
       sexo == "M" & comentario == "evaluar sexo" ~ paste0("anemia basal"),
-      sexo == "F" & comentario == "evaluar sexo" ~ "",
+      sexo == "F" & comentario == "evaluar sexo" ~ "apto",
       TRUE                                     ~ comentario # Mantiene el valor original si no cumple lo anterior
     ),
     # Usamos if_else para una decisión binaria simple
-    decision = if_else(comentario != "" & !is.na(comentario), "EXCLUIR", "CONTINUAR")
+    decision = if_else(comentario != "apto", "EXCLUIR", "CONTINUAR")
   ) %>% 
   relocate(comentario, .after = sexo) %>% 
   relocate(decision, .after = last_col())
@@ -340,6 +377,16 @@ archivos_distintos <- n_distinct(tabla_3$archivo)
 
 continuan <- tabla_3 %>% filter(decision == "CONTINUAR") %>% count()
 excluidos <- tabla_3 %>% filter(decision == "EXCLUIR") %>% count()
+
+summary(tabla_3) %>% View()
+
+colus <- colnames(tabla_3)
+# Opción correcta y rápida
+vacios <- data.frame(
+  columna = colus, 
+  cantidad_vacios = colSums(is.na(tabla_3)), 
+  row.names = NULL
+)
 
 ## creo una tabla con comentario normalizado y sin algunas variables
 resumir_tabla_3 <- tabla_3 %>% 
@@ -447,6 +494,7 @@ definiciones <- tribble(
   "","",
   "","",
   "Resto de hojas:", "analisis de resultados",
+  "vacíos:","Numero de registros vacíos en cada variable",
   "biostats 1 y 2:","Tablas creada con paquete Biostats",
   "excluidos","Cantidad de archivos etiquetados con cada causa de exclusion",
   "hb_iniciales:", "Análisis resumen de todas las hb_inciciales (todos los archivos)",
@@ -461,6 +509,7 @@ definiciones <- tribble(
 reporte_completo <- list(
   "definiciones" = definiciones,
   "tabla_pacientes" = tabla_3,
+  "vacíos" = vacios,
   "biostats_1" = bio,
   "biostats_2" = excluidos2,
   "excluidos" = grupos_comentarios,
@@ -474,3 +523,6 @@ write_xlsx(reporte_completo, ruta_destino2)
 
 
 
+
+##########################
+#escenario de prueba
