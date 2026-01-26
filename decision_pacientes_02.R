@@ -75,6 +75,9 @@ if (!dir.exists(path_excluidos)) dir.create(path_excluidos, recursive = TRUE)
 # 2. LISTAR ARCHIVOS DEL PENDRIVE que sean .txt
 archivos_pendrive <- list.files(path = path_proyecto, pattern = "\\.txt$", full.names = TRUE)
 
+if (length(archivos_pendrive) == 0) {
+  stop("No se encontraron archivos .txt en la ruta especificada.")
+}
 # 1. Extraer solo el nombre (ej: "blabla.txt") de la ruta completa para luego documentar
 nombres_limpios <- basename(archivos_pendrive)
 
@@ -114,7 +117,7 @@ for (archivo_txt in archivos_pendrive) {
       ungroup()
     
     # 4. Verificación antes de guardar
-    print(paste("Pacientes detectados:", length(unique(df_segmentado$nombre_archivo))))
+    print(paste("Archivos detectados:", length(unique(df_segmentado$nombre_archivo))))
     
     
   # Guardar cada subarchivo en la carpeta Pacientes del proyecto local
@@ -198,23 +201,6 @@ for (p in pacientes) {
   }
   
   
-  # --- Extraccion de dni, hc, fechas de internacion del bloque clinico
-  #bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
-  #
-  # extraer_flexible <- function(texto, etiqueta) {
-  #   pattern <- if (etiqueta %in% c("DNI:", "HC:")) paste0(etiqueta, "\\s*(\\d+)") else
-  #     if (etiqueta %in% c("FI:", "FICM:")) paste0(etiqueta, "\\s*([\\d/]+)") else
-  #       paste0(etiqueta, "\\s*([^\\s]+)")
-  #   match <- str_match(texto, pattern)
-  #   if (!is.na(match[1,2])) return(str_trim(match[1,2])) else return(NA_character_)
-  # }
-  # 
-  # dni_v <- extraer_flexible(bloque_clinico, "DNI:")
-  # hc_v  <- extraer_flexible(bloque_clinico, "HC:")
-  # fi_v  <- extraer_flexible(bloque_clinico, "FI:")
-  # ficm_v <- extraer_flexible(bloque_clinico, "FICM:")
-  # 
-  
   # Unificamos el bloque de búsqueda (Líneas 1 a 5)
   bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
   
@@ -238,7 +224,7 @@ for (p in pacientes) {
   )
   
   # --- BLOQUE DE LABORATORIO (1era Hb y su Fecha) 
-  idx_lab <- which(str_detect(contenido, regex("laboratorios:", ignore_case = TRUE)))[1]
+  idx_lab <- which(str_detect(contenido, regex("laboratorios:", ignore_case = TRUE)))[1]  #Es la posición (línea) donde se detectó la palabra "Laboratorios" o similar.
   hb_inicial <- NA_real_
   fecha_hb_inicial <- NA_character_
   
@@ -251,17 +237,19 @@ for (p in pacientes) {
     for (i in rango_busqueda) {
       linea_lab <- contenido[i]
       
-      if (str_detect(linea_lab, "^\\d{1,2}/\\d{1,2}:")) {
-        fecha_hb_inicial <- str_extract(linea_lab, "^\\d{1,2}/\\d{1,2}")
+      if (str_detect(linea_lab, "^\\d{1,2}/\\d{1,2}:")) {                   # Busca líneas que empiecen con un formato de fecha (ej: 12/05: o 5/8:).
+        fecha_hb_inicial <- str_extract(linea_lab, "^\\d{1,2}/\\d{1,2}")    # Detecta uno o dos dígitos, una barra, otros uno o dos dígitos y dos puntos al inicio de la línea.
         
-        datos_puros <- str_remove(linea_lab, "^\\d{1,2}/\\d{1,2}:") %>% str_trim()
+        datos_puros <- str_remove(linea_lab, "^\\d{1,2}/\\d{1,2}:")  # Quita la fecha de la línea para quedarse solo con los datos de labo
+        %>% str_trim()
         partes <- str_split_1(datos_puros, "/")
         
         if (length(partes) >= 2) {
           valor_candidato <- as.numeric(str_extract(partes[2], "\\d+\\.?\\d*"))
           if (!is.na(valor_candidato) && valor_candidato >= 3.0 && valor_candidato <= 45.0) {
             hb_inicial <- valor_candidato
-            break 
+            break   # break: En cuanto encuentra el primer valor que cumple, detiene el bucle for para no seguir buscando.
+
           }
         }
       }

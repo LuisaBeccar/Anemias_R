@@ -24,11 +24,7 @@ analizando_resultados <- function(tabla) {
     row.names = NULL
   )
   
-  # C. Tabla resumida para biostats
-  resumir_tabla <- tabla %>% 
-    mutate(comentario_normalizado = str_remove(comentario, ",.*$")) %>% 
-    select(-c(archivo, nombre, dni, nro_hc, f_internacion, fi_clinica_medica, f_hb_inicial, comentario))
-  
+ 
   # D. Grupos de exclusión
   grupos_excluidos <- tabla %>% 
     filter(decision == "EXCLUIR") %>% 
@@ -38,9 +34,9 @@ analizando_resultados <- function(tabla) {
     ungroup() %>% 
     janitor::adorn_totals(where = "row", name = "TOTAL EXCLUIDOS")
   
-  # E. Función interna para métricas de HB
-  metricas_hb <- function(df) {
-    df %>% filter(!is.na(hb_inicial)) %>% 
+  # E. Función interna para métricas de HB, en todas los grupos voy a queres que no esten las hb vacias  y qeu haga el summarise con todas esas metricas
+  metricas_hb <- function(tabla) {
+    tabla %>% filter(!is.na(hb_inicial)) %>% 
       summarise(across(hb_inicial, list(min=min, max=max, media=mean, mediana=median, sd=sd), .names = "{.fn}"))
   }
   
@@ -49,11 +45,16 @@ analizando_resultados <- function(tabla) {
   hb_anemia <- metricas_hb(tabla %>% filter(decision == "EXCLUIR" & str_detect(comentario, "anemia")))
   hb_sin_anemia <- metricas_hb(tabla %>% filter(decision == "CONTINUAR"))
   
+  # C. Tabla resumida para biostats
+  resumir_tabla <- tabla %>% 
+    mutate(comentario_normalizado = str_remove(comentario, ",.*$")) %>% 
+    select(-c(archivo, nombre, dni, nro_hc, f_internacion, fi_clinica_medica, f_hb_inicial, comentario))
+  
   # G. Biostats
   bio_1 <- as.data.frame(biostats::summary_table(resumir_tabla)) %>% select(-any_of("normality"))
   bio_2 <- as.data.frame(biostats::summary_table(resumir_tabla, group_by = "decision", all = TRUE, exclude = "sexo"))
   
-  # Retornar todo en una lista organizada
+  # devolver todo en una lista organizada
   return(list(
     counts = resumen_counts,
     vacios = vacios,

@@ -3,7 +3,9 @@ library(dplyr)
 # 1 -----------------------------------------------------------
 docx_a_txt <- function (ruta_archivos_docx, ruta_destino_txt) {
   if (!dir.exists(ruta_destino_txt)) dir.create(ruta_destino_txt)
+  
   datos_word <- readtext(paste0(ruta_archivos_docx, "*.docx"))   # Leer todos los archivos .docx de una sola vez
+  
   for (i in 1:nrow(datos_word)) {        # 2. Guardar cada uno como .txt          # Usamos un loop rápido solo para la escritura en disco
     nombre_archivo <- str_replace(datos_word$doc_id[i], "\\.docx$", ".txt")       # Limpiar el nombre: quitar .docx y poner .txt
     write_lines(datos_word$text[i], file.path(ruta_destino_txt, nombre_archivo))  # Escribir el contenido en la carpeta de destino
@@ -27,22 +29,23 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
   # 3. Procesar cada archivo
   for (archivo_txt in archivos_pendrive) {
     # Leer el archivo. Usamos read_delim del paquete readr
-    temp_data <- readr::read_delim(archivo_txt, delim = "\n", col_names = "X1", 
+    temp_data <- readr::read_delim(archivo_txt, delim = "\n", col_names = "X1",
                                    show_col_types = FALSE, quote = "")
-    
+
     # Segmentación y limpieza
     df_segmentado <- temp_data %>%
       dplyr::mutate(
         # Identificar inicio de registro de paciente
         es_inicio = stringr::str_detect(X1, "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ\\s]+\\s*(\\(\\d+\\)|\\d{1,2})?"),
-        id_paciente_unico = cumsum(es_inicio)
+        id_paciente_unico = cumsum(es_inicio) # 2. ID secuencial único: Cada paciente tendrá su propio número del 1 al n
       ) %>%
       dplyr::filter(id_paciente_unico > 0) %>%
       dplyr::group_by(id_paciente_unico) %>%
       dplyr::mutate(
         id_4digitos = stringr::str_extract(dplyr::first(X1), "^\\d{4}"),
         indice_str = sprintf("%03d", id_paciente_unico),
-        nombre_archivo = paste0(indice_str, "_", id_4digitos, ".txt")
+        # clave_aleatoria = stri_rand_strings(1, 5),  ## quizas no es necesario.. 
+        nombre_archivo = paste0(indice_str, "_", id_4digitos, ".txt") # opcional "_", clave_aleatoria,
       ) %>%
       dplyr::ungroup()
     
@@ -64,7 +67,7 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
 
 # herramientas
 
-# DNI HC FI FICM
+# --- DNI HC FI FICM
 extraer_dato_clinico <- function(texto, etiqueta) {
   patron <- paste0("(?i)", etiqueta, "[:\\s]*([\\d/\\.]+)")
   match <- stringr::str_match(texto, patron)
@@ -72,33 +75,57 @@ extraer_dato_clinico <- function(texto, etiqueta) {
 }
 
 
-# Hemoglobina incicial
+# --- Hemoglobina inicial  # sera usada dentro de fx ecaluar pacientes 
 extraer_hb_inicial <- function(contenido, idx_lab) {
-  if (is.na(idx_lab)) return(list(valor = NA_real_, fecha = NA_character_))
+  # 1. Validación de seguridad inicial
+  if (is.na(idx_lab) || idx_lab >= length(contenido)) {
+    return(list(valor = NA_real_, fecha = NA_character_))
+  }
   
+  # 2. Definir ventana de búsqueda (10 líneas)
   limite_superior <- min(idx_lab + 10, length(contenido))
   rango_busqueda <- (idx_lab + 1):limite_superior
   
   for (i in rango_busqueda) {
     linea_lab <- contenido[i]
+    
+    # 3. Detectar línea con formato Fecha: Datos
     if (stringr::str_detect(linea_lab, "^\\d{1,2}/\\d{1,2}:")) {
-      fecha <- stringr::str_extract(linea_lab, "^\\d{1,2}/\\d{1,2}")
-      partes <- stringr::str_split_1(stringr::str_remove(linea_lab, "^\\d{1,2}/\\d{1,2}:"), "/")
+      
+      # Extraer la fecha
+      fecha_detectada <- stringr::str_extract(linea_lab, "^\\d{1,2}/\\d{1,2}")
+      
+      # Limpiar la línea y dividir por "/"
+      datos_puros <- stringr::str_remove(linea_lab, "^\\d{1,2}/\\d{1,2}:") %>% 
+        stringr::str_trim()
+      
+      partes <- stringr::str_split_1(datos_puros, "/")
+      
+      # 4. Evaluar la segunda posición (índice 2)
       if (length(partes) >= 2) {
-        valor <- as.numeric(stringr::str_extract(partes[2], "\\d+\\.?\\d*"))
-        if (!is.na(valor) && valor >= 3.0 && valor <= 45.0) return(list(valor = valor, fecha = fecha))
+        # Extraer solo el número (soporta decimales)
+        valor_candidato <- as.numeric(stringr::str_extract(partes[2], "\\d+\\.?\\d*"))
+        
+        # Validación de rango clínico (Hemoglobina válida entre 3 y 45)
+        if (!is.na(valor_candidato) && valor_candidato >= 3.0 && valor_candidato <= 45.0) {
+          return(list(valor = valor_candidato, fecha = fecha_detectada))
+        }
       }
     }
-    if (linea_lab == "" || stringr::str_detect(linea_lab, "^[A-Z][a-z]+:")) break
+    
+    # 5. Parada de emergencia: si hay línea vacía o nueva sección con "Texto:"
+    if (linea_lab == "" || stringr::str_detect(linea_lab, "^[A-Z][a-z]+:")) {
+      break
+    }
   }
+  
+  # Si recorre todo el rango y no encuentra nada, devuelve NA
   return(list(valor = NA_real_, fecha = NA_character_))
 }
 
+
 # 4 ----------------------------------------------------------------------
 evaluar_pacientes <- function(path_pacientes, path_excluidos) {
-  library(dplyr)
-  library(stringr)
-  library(readr)
   
   pacientes_files <- list.files(path = path_pacientes, pattern = "\\.txt$", full.names = FALSE)
   regex_exclusion <- "(embaraz|gestac|hemorrag|politrauma|trauma(?!to|log|tolo))"
@@ -112,16 +139,28 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
     # --- Extracción de Identidad ---
     linea_1 <- contenido[1]
     
-    edad_raw <- str_extract(linea_1, "(?i)(\\(\\s*(edad\\s*)?\\d[\\s\\d]{1,3}(.*?)\\)|\\bedad[:\\s]*\\d[\\s\\d]{1,3}\\b|\\b\\d[\\s\\d]{1,3}\\s*(años?|ños|a|(?=\\s*-?DNI|\\s*-?HC|$)))")
-    edad_v <- if (!is.na(edad_raw)) as.numeric(str_remove_all(edad_raw, "[^0-9]")) else NA_real_
+    # edad_raw <- str_extract(linea_1, "(?i)(\\(\\s*(edad\\s*)?\\d[\\s\\d]{1,3}(.*?)\\)|\\bedad[:\\s]*\\d[\\s\\d]{1,3}\\b|\\b\\d[\\s\\d]{1,3}\\s*(años?|ños|a|(?=\\s*-?DNI|\\s*-?HC|$)))")
+    # edad_v <- if (!is.na(edad_raw)) as.numeric(str_remove_all(edad_raw, "[^0-9]")) else NA_real_
+    # 
+    edad_raw <- linea_1 %>% 
+      str_remove("^\\d{4}\\s*[-]?\\s*") %>%
+      str_remove("\\s*[-]?\\s*.") %>% 
+      str_extract("(?i)(\\(\\s*(edad\\s*)?\\d[\\s\\d]{1,3}(.*?)\\)|\\bedad[:\\s]*\\d[\\s\\d]{1,3}\\b|\\b\\d[\\s\\d]{1,3}\\s*(años?|ños|a|(?=\\s*-?DNI|\\s*-?HC|$)))")
+      # [\\s\\d]{1,3} capturar números que tienen espacios locos en medio
+      #  detectará la edad  antes de "DNI", y sino también antes de palabras como "años", "HC" o simplemente antes de una letra.
+    # 2. Limpiamos solo los números y convertimos de forma segura
+    edad_v <- if (!is.na(edad_raw)) {as.numeric(str_remove_all(edad_raw, "[^0-9]"))} else {NA_real_}
     
     nombre_v <- linea_1 %>%
       str_replace("^\\d{4}\\s*[-]?\\s*", "") %>%
       str_extract("(?i)^.*?(?=\\s*\\(\\s*(edad|\\d+)|\\s+edad|\\s+\\d+|\\s*(DNI|HC|FI)|$)") %>% 
-      str_remove_all("[-|,]") %>% str_trim() %>% toupper()
-     
+      str_remove_all("[-|,]") %>% 
+      str_trim() %>% 
+      toupper()
+    
     # --- Datos Clínicos (Líneas 1-5) ---   aca usa fx extraer dato clinico para cada etiqueta
     bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
+   
     dni_v  <- extraer_dato_clinico(bloque_clinico, "DNI")
     hc_v   <- extraer_dato_clinico(bloque_clinico, "HC")
     fi_v   <- extraer_dato_clinico(bloque_clinico, "FI")
@@ -129,22 +168,23 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
     
     # --- Exclusiones y Laboratorio ---
     texto_completo <- tolower(paste(contenido, collapse = " "))
-    hallazgo_excl <- str_extract(texto_completo, regex_exclusion)
+    hallazgo_exclusion <- str_extract(texto_completo, regex_exclusion)
     
-    hallazgo_norm <- case_when(
-      str_detect(hallazgo_excl, "embaraz|gestac") ~ "embarazo",
-      str_detect(hallazgo_excl, "hemorrag")      ~ "hemorragia",
-      str_detect(hallazgo_excl, "politrauma|trauma") ~ "traumatismo",
-      TRUE ~ NA_character_
-    )
+    hallazgo_normalizado <- case_when(
+      str_detect(hallazgo_exclusion, "embaraz|gestac") ~ "embarazo",
+      str_detect(hallazgo_exclusion, "hemorrag")      ~ "hemorragia",
+      str_detect(hallazgo_exclusion, "politrauma|trauma") ~ "traumatismo") #,
+    # TRUE ~ NA_character_
+    # )
     
     idx_lab <- which(str_detect(contenido, regex("laboratorios:", ignore_case = TRUE)))[1]
-    res_hb <- extraer_hb_inicial(contenido, idx_lab)   ## aca usa fx hemobglobina inicial
+    
+    res_hb <- extraer_hb_inicial(contenido, idx_lab)   ## ACA usa fx hemobglobina inicial definida antes de la fx evaluar pacientes
     
     # --- Clasificación ---
     comentario_v <- case_when(
       !is.na(edad_v) && edad_v < 18               ~ "< 18 años",
-      !is.na(hallazgo_norm)                      ~ hallazgo_norm,
+      !is.na(hallazgo_normalizado)                      ~ hallazgo_normalizado,
       !is.na(res_hb$valor) && res_hb$valor < 12.0 ~ "anemia basal",
       is.na(res_hb$valor)                        ~ "falta hb inicial",
       !is.na(res_hb$valor) && res_hb$valor >= 12.0 && res_hb$valor < 13.0 ~ "evaluar sexo",

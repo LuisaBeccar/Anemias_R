@@ -1,11 +1,10 @@
 # Session > Set Working Directory > To Source File Location.
-setwd("C:/Users/luisa/OneDrive/Documentos/R Studio/PaulaAnemias/")
+setwd("C:/Users/luisa/OneDrive/Documentos/R Studio/PaulaAnemias")
 
 source("librerias.R")
 source("funciones.R")
 source("analisis_resultados.R")
 source("generar_reporte.R")
-library(dplyr)
 
 
 #------------
@@ -13,7 +12,7 @@ library(dplyr)
 path_word <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/test_modularizado/"
 path_txt  <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/test_modularizado/"
 
-path_proyecto <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/test_modularizado/" # donde estan los archivos grandotes .txt 
+path_proyecto <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/test_modularizado" # donde estan los archivos grandotes .txt 
 path_pacientes <- file.path(path_proyecto, "Pacientes")
 path_excluidos <- file.path(path_pacientes, "Excluidos")
 
