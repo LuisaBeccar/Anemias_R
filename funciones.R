@@ -128,8 +128,8 @@ extraer_hb_inicial <- function(contenido, idx_lab) {
 evaluar_pacientes <- function(path_pacientes, path_excluidos) {
   
   pacientes_files <- list.files(path = path_pacientes, pattern = "\\.txt$", full.names = FALSE)
-  regex_exclusion <- "(embaraz|gestac|hemorrag|politrauma|trauma(?!to|log|tolo))"
-  registro_inicial <- list()
+  regex_exclusion <- "((?<!tuvo |niega |sin |de )embaraz(?!os|.*(negativo|-))|gestac(?!.*(negativo|-))|hemorrag|politrauma|trauma(?!to|log|tolo))"
+  registro_inicial <- list() 
   
   for (p in pacientes_files) {
     ruta_origen <- file.path(path_pacientes, p)
@@ -226,10 +226,8 @@ solicitar_sexo <- function(tabla) {
       mensaje <- paste0("¿Es ", tabla$nombre[i], " de sexo MASCULINO? (Y/N): ")
       respuesta <- readline(prompt = mensaje)
       
-      if (toupper(respuesta) == "Y") {
-        tabla$sexo[i] <- "M"
-      } else if (toupper(respuesta) == "N") {
-        tabla$sexo[i] <- "F"
+      if (toupper(respuesta) == "Y") {tabla$sexo[i] <- "M"
+      } else if (toupper(respuesta) == "N") { tabla$sexo[i] <- "F"
       } else {
         message("Respuesta no válida para ", tabla$nombre[i], ". Se mantiene como NA.")
       }
