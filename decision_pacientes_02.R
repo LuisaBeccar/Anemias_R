@@ -75,7 +75,7 @@ if (!dir.exists(path_excluidos)) dir.create(path_excluidos, recursive = TRUE)
 # 2. LISTAR ARCHIVOS DEL PENDRIVE que sean .txt
 archivos_pendrive <- list.files(path = path_proyecto, pattern = "\\.txt$", full.names = TRUE)
 
-# 1. Extraer solo el nombre (ej: "3300.txt") de la ruta completa para luego documentar
+# 1. Extraer solo el nombre (ej: "blabla.txt") de la ruta completa para luego documentar
 nombres_limpios <- basename(archivos_pendrive)
 
 # 2. Unir todos los nombres en un solo string separados por " - "
