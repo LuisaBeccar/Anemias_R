@@ -44,6 +44,10 @@
 ##
 ################################################################################
 ###############
+
+setwd("C:/Users/luisa/OneDrive/Documentos/R Studio/PaulaAnemias/")
+
+library(here)
 library(tidyverse)
 library(stringi)
 library(readr)
@@ -54,6 +58,9 @@ library(tidyr)
 library(stringr)
 library(lubridate)
 library(janitor)
+
+here::i_am("decision_pacientes_02.R")
+here()
 
 # 1. CONFIGURACIÓN DE RUTAS
 #C:\Users\luisa\OneDrive\Desktop\sup_PEDRIVE\PAU_altas_txt
@@ -526,3 +533,4 @@ write_xlsx(reporte_completo, ruta_destino2)
 
 ##########################
 #escenario de prueba
+
