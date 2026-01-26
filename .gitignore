@@ -1,0 +1,12 @@
+# Directorio de usuario de RStudio (contiene configuraciones de sesión)
+.Rproj.user/
+
+# Historial de comandos
+.Rhistory
+.Rapp.history
+
+# Datos de la sesión (workspace)
+.RData
+.RDataTmp
+
+# Archivos específicos del usuario
