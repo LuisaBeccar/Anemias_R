@@ -124,32 +124,43 @@ extraer_hb_inicial <- function(contenido, idx_lab) {
 }
 
 
-# 4 ----------------------------------------------------------------------
+# 4 ----------- excluyendo epicriris y duplicados
+
 evaluar_pacientes <- function(path_pacientes, path_excluidos) {
+  
+  # 1. Configurar rutas de exclusión
+  if (!dir.exists(path_excluidos)) dir.create(path_excluidos)
+  path_epicrisis <- file.path(path_excluidos, "Epicrisis")
+  if (!dir.exists(path_epicrisis)) dir.create(path_epicrisis, recursive = TRUE)
   
   pacientes_files <- list.files(path = path_pacientes, pattern = "\\.txt$", full.names = FALSE)
   regex_exclusion <- "((?<!tuvo |niega |sin |de )embaraz(?!os|.*(negativo|-))|gestac(?!.*(negativo|-))|hemorrag|politrauma|trauma(?!to|log|tolo))"
   registro_inicial <- list() 
+  conteo_epicrisis <- 0
   
   for (p in pacientes_files) {
     ruta_origen <- file.path(path_pacientes, p)
+    
+    # --- Detección Inmediata de Epicrisis ---
+    if (str_detect(toupper(p), "EPICRISIS")) {
+      file.rename(ruta_origen, file.path(path_epicrisis, p))
+      conteo_epicrisis <- conteo_epicrisis + 1
+      next 
+    }
+    
+    ## resto de analisis si no dice epicrisis
     contenido <- read_lines(ruta_origen)
     if (length(contenido) < 2) next 
     
     # --- Extracción de Identidad ---
     linea_1 <- contenido[1]
     
-    # edad_raw <- str_extract(linea_1, "(?i)(\\(\\s*(edad\\s*)?\\d[\\s\\d]{1,3}(.*?)\\)|\\bedad[:\\s]*\\d[\\s\\d]{1,3}\\b|\\b\\d[\\s\\d]{1,3}\\s*(años?|ños|a|(?=\\s*-?DNI|\\s*-?HC|$)))")
-    # edad_v <- if (!is.na(edad_raw)) as.numeric(str_remove_all(edad_raw, "[^0-9]")) else NA_real_
-    # 
     edad_raw <- linea_1 %>% 
       str_remove("^\\d{4}\\s*[-]?\\s*") %>%
       str_remove("\\s*[-]?\\s*.") %>% 
       str_extract("(?i)(\\(\\s*(edad\\s*)?\\d[\\s\\d]{1,3}(.*?)\\)|\\bedad[:\\s]*\\d[\\s\\d]{1,3}\\b|\\b\\d[\\s\\d]{1,3}\\s*(años?|ños|a|(?=\\s*-?DNI|\\s*-?HC|$)))")
-      # [\\s\\d]{1,3} capturar números que tienen espacios locos en medio
-      #  detectará la edad  antes de "DNI", y sino también antes de palabras como "años", "HC" o simplemente antes de una letra.
-    # 2. Limpiamos solo los números y convertimos de forma segura
-    edad_v <- if (!is.na(edad_raw)) {as.numeric(str_remove_all(edad_raw, "[^0-9]"))} else {NA_real_}
+    
+    edad_v <- if (!is.na(edad_raw)) as.numeric(str_remove_all(edad_raw, "[^0-9]")) else NA_real_
     
     nombre_v <- linea_1 %>%
       str_replace("^\\d{4}\\s*[-]?\\s*", "") %>%
@@ -158,9 +169,8 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
       str_trim() %>% 
       toupper()
     
-    # --- Datos Clínicos (Líneas 1-5) ---   aca usa fx extraer dato clinico para cada etiqueta
+    # --- Datos Clínicos (Líneas 1-5) ---
     bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
-   
     dni_v  <- extraer_dato_clinico(bloque_clinico, "DNI")
     hc_v   <- extraer_dato_clinico(bloque_clinico, "HC")
     fi_v   <- extraer_dato_clinico(bloque_clinico, "FI")
@@ -173,41 +183,51 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
     hallazgo_normalizado <- case_when(
       str_detect(hallazgo_exclusion, "embaraz|gestac") ~ "embarazo",
       str_detect(hallazgo_exclusion, "hemorrag")      ~ "hemorragia",
-      str_detect(hallazgo_exclusion, "politrauma|trauma") ~ "traumatismo") #,
-    # TRUE ~ NA_character_
-    # )
+      str_detect(hallazgo_exclusion, "politrauma|trauma") ~ "traumatismo",
+      TRUE ~ NA_character_
+    )
     
     idx_lab <- which(str_detect(contenido, regex("laboratorios:", ignore_case = TRUE)))[1]
-    
-    res_hb <- extraer_hb_inicial(contenido, idx_lab)   ## ACA usa fx hemobglobina inicial definida antes de la fx evaluar pacientes
+    res_hb <- extraer_hb_inicial(contenido, idx_lab)
     
     # --- Clasificación ---
     comentario_v <- case_when(
-      !is.na(edad_v) && edad_v < 18               ~ "< 18 años",
-      !is.na(hallazgo_normalizado)                      ~ hallazgo_normalizado,
-      !is.na(res_hb$valor) && res_hb$valor < 12.0 ~ "anemia basal",
-      is.na(res_hb$valor)                        ~ "falta hb inicial",
-      !is.na(res_hb$valor) && res_hb$valor >= 12.0 && res_hb$valor < 13.0 ~ "evaluar sexo",
-      TRUE                                       ~ "apto"
+      !is.na(edad_v) & edad_v < 18                ~ "< 18 años",
+      !is.na(hallazgo_normalizado)               ~ hallazgo_normalizado,
+      !is.na(res_hb$valor) & res_hb$valor < 12.0  ~ "anemia basal",
+      is.na(res_hb$valor)                         ~ "falta hb inicial",
+      !is.na(res_hb$valor) & res_hb$valor >= 12.0 & res_hb$valor < 13.0 ~ "evaluar sexo",
+      TRUE                                        ~ "apto"
     )
     
-    # Almacenar
+    # --- Mover archivos excluidos (opcional) ---
+    if (comentario_v %in% c("< 18 años", "embarazo", "hemorragia", "traumatismo")) {
+      file.rename(ruta_origen, file.path(path_excluidos, p))
+    }
+    
+    # Almacenar en lista
     registro_inicial[[p]] <- tibble(
-      archivo = p, 
-      nombre = nombre_v, 
-      edad = edad_v, 
-      dni = dni_v, 
-      nro_hc = hc_v, 
-      f_internacion = fi_v,
-      fi_clinica_medica = ficm_v,
-      f_hb_inicial = res_hb$fecha,
-      hb_inicial = res_hb$valor,
-      comentario = comentario_v
+      archivo = p, nombre = nombre_v, edad = edad_v, dni = dni_v, 
+      nro_hc = hc_v, f_internacion = fi_v, fi_clinica_medica = ficm_v,
+      f_hb_inicial = res_hb$fecha, hb_inicial = res_hb$valor, comentario = comentario_v
     )
-  }
+    
+  } # <-- AQUÍ FALTABA ESTA LLAVE (Cierre del bucle for)
   
-  return(bind_rows(registro_inicial))
-}
+  # 2. Consolidar y aplicar UNIQUE (distinct)
+  df_final <- bind_rows(registro_inicial) %>%
+    distinct(nombre, dni, f_internacion, fi_clinica_medica, hb_inicial, .keep_all = TRUE) %>%
+    # Reemplazo de comas por puntos en columnas de texto
+    mutate(across(where(is.character), ~ str_replace_all(., ",", "."))) %>%
+    # Aseguramos que hb_inicial sea numérica
+    mutate(hb_inicial = as.numeric(hb_inicial))
+  
+
+  attr(df_final, "conteo_epicrisis") <- conteo_epicrisis
+  message(paste("Proceso finalizado. Epicrisis detectadas y excluidas:", conteo_epicrisis))
+  
+  return(df_final)
+  }
 
 # 5 --------------------------------------------------------------------------
 solicitar_sexo <- function(tabla) {
@@ -282,4 +302,54 @@ organizar_archivos <- function(tabla, path_pacientes, path_excluidos) {
   }
 }
 
-# 7 -----------------------------------------------------------------------
+# 7 --------------------------------------------------------------------------
+
+revision_tabla <- function(tabla) {
+  
+  # Guardamos el conteo de epicrisis que viene de la tabla original (si existe)
+  conteo_epi_previo <- attr(tabla, "conteo_epicrisis")
+  
+  tabla_procesada <- tabla %>% 
+    dplyr::mutate(
+      # 1. Determinamos si TIENE anemia según el sexo recién completado
+      motivo_anemia = dplyr::case_when(
+        sexo == "F" & hb_inicial < 12 ~ "anemia basal",
+        sexo == "M" & hb_inicial < 13 ~ "anemia basal",
+        TRUE                          ~ "apto"
+      ),
+      
+      # 2. Lógica de pegado inteligente (comentario_3)
+      comentario_3 = dplyr::case_when(
+        # Caso A: Ya decía anemia basal y el nuevo cálculo confirma anemia basal -> No cambia
+        comentario == "anemia basal" & motivo_anemia == "anemia basal" ~ "anemia basal",
+        
+        # Caso B: Era "apto" pero ahora con el sexo es "anemia basal" -> Cambia a anemia
+        comentario == "apto" & motivo_anemia == "anemia basal" ~ "anemia basal",
+        
+        # Caso C: Tenía otro motivo (ej: "< 18") y además es anemia -> Los pega
+        comentario != "apto" & motivo_anemia == "anemia basal" & !str_detect(comentario, "anemia") ~ 
+          paste(comentario, "anemia basal", sep = " y "),
+        
+        # Caso D: En cualquier otro caso, mantenemos el comentario original
+        TRUE ~ comentario
+      )
+    ) %>% 
+    # 3. Limpieza y actualización de decisión
+    dplyr::mutate(comentario_2 = comentario_3) %>% 
+    dplyr::select(-motivo_anemia, -comentario_3) %>% 
+    dplyr::mutate(
+      decision = dplyr::if_else(comentario_2 == "apto", "CONTINUAR", "EXCLUIR")
+    ) %>% 
+    # 4. Reorganización estética
+    dplyr::relocate(sexo, .after = hb_inicial) %>% 
+    dplyr::relocate(comentario, comentario_2, .after = sexo) %>% 
+    dplyr::relocate(decision, .after = dplyr::last_col())
+  
+  # Re-asignar el atributo para que el reporte no pierda el número de Epicrisis
+  if(!is.null(conteo_epi_previo)) {
+    attr(tabla_procesada, "conteo_epicrisis") <- conteo_epi_previo
+  }
+  
+  return(tabla_procesada)
+}
+##############################################################################

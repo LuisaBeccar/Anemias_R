@@ -8,6 +8,17 @@
 # o meterlo todo en una funcion 
 analizando_resultados <- function(tabla) {
   
+  if ("comentario_2" %in% colnames(tabla)) {
+      tabla <- tabla %>%
+      rename(comentario_previo = comentario) %>%           # cambio el nombre del viejo
+      rename(comentario = comentario_2)  # Renombra el nuevo para que sea el principal
+    
+    cat("Actualización: Se ha reemplazado 'comentario' por 'comentario_2'.\n")
+    
+  } else {
+    cat("Nota: 'comentario_2' no detectado, se mantiene el comentario original.\n")
+  }
+  
   # A. Conteos básicos
   resumen_counts <- list(
     n_archivos = n_distinct(tabla$archivo),
@@ -28,8 +39,8 @@ analizando_resultados <- function(tabla) {
   # D. Grupos de exclusión
   grupos_excluidos <- tabla %>% 
     filter(decision == "EXCLUIR") %>% 
-    mutate(comentario_normalizado = str_remove(comentario, ",.*$")) %>%
-    group_by(comentario_normalizado) %>% 
+    #mutate(comentario_normalizado = str_remove(comentario, ",.*$")) %>%
+    group_by(comentario) %>% 
     count() %>% 
     ungroup() %>% 
     janitor::adorn_totals(where = "row", name = "TOTAL EXCLUIDOS")
@@ -45,10 +56,12 @@ analizando_resultados <- function(tabla) {
   hb_anemia <- metricas_hb(tabla %>% filter(decision == "EXCLUIR" & str_detect(comentario, "anemia")))
   hb_sin_anemia <- metricas_hb(tabla %>% filter(decision == "CONTINUAR"))
   
+
   # C. Tabla resumida para biostats
-  resumir_tabla <- tabla %>% 
-    mutate(comentario_normalizado = str_remove(comentario, ",.*$")) %>% 
+resumir_tabla <- tabla %>% 
+    #mutate(comentario_normalizado = str_remove(comentario, ",.*$")) %>% 
     select(-c(archivo, nombre, dni, nro_hc, f_internacion, fi_clinica_medica, f_hb_inicial, comentario))
+    
   
   # G. Biostats
   bio_1 <- as.data.frame(biostats::summary_table(resumir_tabla)) %>% select(-any_of("normality"))

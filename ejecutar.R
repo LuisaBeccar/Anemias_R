@@ -26,6 +26,10 @@ docx_a_txt(path_word,path_txt)
 message("--- Iniciando segmentación de pacientes ---")
 segmentar_pacientes(path_proyecto, path_pacientes, path_excluidos) 
 
+
+# Crear el nombre de los archivos analizados para la doc (opcional)
+str_archivos <- paste(basename(list.files(path_txt, pattern = "\\.txt$")), collapse = "; ")
+
 # Paso C: Evaluación clínica y creación de Tabla 1
 message("--- Iniciando evaluación clínica ---")
 tabla_inicial <- evaluar_pacientes(path_pacientes, path_excluidos)
@@ -33,23 +37,44 @@ tabla_inicial <- evaluar_pacientes(path_pacientes, path_excluidos)
 # 2. Refinamiento por sexo (Interactiva): # Esta función se detendrá y te preguntará en la consola
 tabla_final <- solicitar_sexo(tabla_inicial)
 
-# Paso D. Limpieza física de carpetas: # Mueve los archivos .txt según la decisión de la tabla
-message("--- Moviendo archivos excluidos a su carpeta de Excluidos ---")
-organizar_archivos(tabla_final, path_pacientes, path_excluidos)
-
 ###################################
 
 # Analisis de tabla
-analisis <- analizando_resultados(tabla_final)
+analisis_obj <- analizando_resultados(tabla_final)
 message("--- Generando analisis de resultados ---")
-
-# Crear el nombre de los archivos analizados para la doc (opcional)
-str_archivos <- paste(basename(list.files(path_txt, pattern = "\\.txt$")), collapse = "; ")
 
 # generar reporte
 exportar_reporte_final(
   tabla = tabla_final, 
-  analisis = analisis, 
+  analisis = analisis_obj, 
   ruta_archivo = file.path(path_proyecto, "Reporte_Final.xlsx"),
   archivos_analizados_str = str_archivos
 )
+
+message(paste("--- Reporte generado con éxito en ",path_proyecto," ---"))
+
+# Pregunta interactiva al usuario
+cat("\n------------------------------------------------------------------\n")
+respuesta <- readline(prompt = "¿Desea editar la tabla manualmente para completar sexos antes de mover archivos? (Y/N): ")
+cat("------------------------------------------------------------------\n")
+
+if (toupper(respuesta) == "Y") {
+  
+  # OPCIÓN Y: El usuario quiere el proceso largo
+  message("\n[ACCIÓN] Por favor, abra 'Reporte_Final.csv', complete los sexos faltantes,")
+  message("guárdelo como 'Tabla_Revisada_Completa.csv' y ejecute el script 'ejecutar_2.R'.")
+  message("El programa finalizará ahora sin mover archivos físicos.\n")
+  
+} else if (toupper(respuesta) == "N") {
+  
+  # OPCIÓN N: El usuario quiere terminar ahora
+  message("\n[ACCIÓN] Procediendo a organizar archivos con la información actual...")
+  
+  # Movemos los archivos según la decisión de tabla_final (la automática)
+  organizar_archivos(tabla_final, path_pacientes, path_excluidos)
+  
+  message("--- Proceso finalizado con éxito (sin reevaluación manual) ---")
+  
+} else {
+  message("\n[ERROR] Opción no válida. No se realizaron movimientos de archivos.")
+}
