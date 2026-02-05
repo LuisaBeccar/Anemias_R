@@ -19,8 +19,8 @@ archivo_input <- file.path(path_proyecto, "Tabla_Revisada_Completa.csv")
 if (file.exists(archivo_input)) {
   
   # Leemos la tabla (ajusta el delimitador si usas  o CSV)
-  tabla_revisada <- readr::read_delim(archivo_input, delim = ",", locale = locale(decimal_mark = "."))
-  
+  tabla_revisada <- readr::read_delim(archivo_input, delim = ",", locale = locale(decimal_mark = ","))
+
   message("--- Iniciando Reevaluación de Datos Completos ---")
   
   # 2. Correr la función de revisión (la que combina comentarios)

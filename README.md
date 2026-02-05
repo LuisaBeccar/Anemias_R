@@ -4,10 +4,6 @@
 la logica funciona. 
 fixes necesarios
 
-1) no detecta que en el nombre diga epicrisis y lo separa
-
-2) al exportar el excel, abrirlo en drive, aparece coma en vez de punto en la hb,  
-al descargarlo como csv, se borra esa coma, y quedann numeros de 113 en vez de 11.3 por ejemplo
 
 3) las etiquetas de comentario_2 cheqear que sean correctas 
 
@@ -15,3 +11,7 @@ al descargarlo como csv, se borra esa coma, y quedann numeros de 113 en vez de 1
 y en el reporte se ve sin datos lo de la hoja definiciones
 
 
+5) ver si en generar reorte quiero tambien que aparezca cuantos estaban duplicados, osea cuantos archivos hay apenas se segmenta 
+y luego cuantos fueron epicrisis y cuantos quedaron 
+y cuantos quedaron al poner el distinct completo.
+luego habra q ver y que en la lista se podra ordenar por nombre y eliminar si hay duplicados que no dice epiciris pero otros datos parecido o nombre apellodo vs apellido nombre 

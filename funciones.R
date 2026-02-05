@@ -141,12 +141,6 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
   for (p in pacientes_files) {
     ruta_origen <- file.path(path_pacientes, p)
     
-    # --- Detección Inmediata de Epicrisis ---
-    if (str_detect(toupper(p), "EPICRISIS")) {
-      file.rename(ruta_origen, file.path(path_epicrisis, p))
-      conteo_epicrisis <- conteo_epicrisis + 1
-      next 
-    }
     
     ## resto de analisis si no dice epicrisis
     contenido <- read_lines(ruta_origen)
@@ -217,14 +211,12 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
   # 2. Consolidar y aplicar UNIQUE (distinct)
   df_final <- bind_rows(registro_inicial) %>%
     distinct(nombre, dni, f_internacion, fi_clinica_medica, hb_inicial, .keep_all = TRUE) %>%
+    
     # Reemplazo de comas por puntos en columnas de texto
     mutate(across(where(is.character), ~ str_replace_all(., ",", "."))) %>%
     # Aseguramos que hb_inicial sea numérica
     mutate(hb_inicial = as.numeric(hb_inicial))
   
-
-  attr(df_final, "conteo_epicrisis") <- conteo_epicrisis
-  message(paste("Proceso finalizado. Epicrisis detectadas y excluidas:", conteo_epicrisis))
   
   return(df_final)
   }
@@ -290,8 +282,6 @@ organizar_archivos <- function(tabla, path_pacientes, path_excluidos) {
     ruta_destino <- file.path(path_excluidos, f)
     
     if (file.exists(ruta_origen)) {
-      # Usamos file.copy + file.remove o file.rename
-      # file.rename es más rápido pero a veces falla entre diferentes discos
       success <- file.rename(ruta_origen, ruta_destino)
       if (success) {
         message(paste("Movido a Excluidos:", f))
@@ -307,7 +297,6 @@ organizar_archivos <- function(tabla, path_pacientes, path_excluidos) {
 revision_tabla <- function(tabla) {
   
   # Guardamos el conteo de epicrisis que viene de la tabla original (si existe)
-  conteo_epi_previo <- attr(tabla, "conteo_epicrisis")
   
   tabla_procesada <- tabla %>% 
     dplyr::mutate(
@@ -344,10 +333,7 @@ revision_tabla <- function(tabla) {
     dplyr::relocate(sexo, .after = hb_inicial) %>% 
     dplyr::relocate(comentario, comentario_2, .after = sexo) %>% 
     dplyr::relocate(decision, .after = dplyr::last_col())
-  
-  # Re-asignar el atributo para que el reporte no pierda el número de Epicrisis
-  if(!is.null(conteo_epi_previo)) {
-    attr(tabla_procesada, "conteo_epicrisis") <- conteo_epi_previo
+
   }
   
   return(tabla_procesada)

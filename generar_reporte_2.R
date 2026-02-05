@@ -1,7 +1,5 @@
 
 exportar_reporte_final_2 <- function(tabla, analisis, ruta_archivo, archivos_analizados_str) {
-  conteo_epicrisis <- attr(tabla, "conteo_epicrisis")
-  if(is.null(conteo_epicrisis)) conteo_epicrisis <- 0
   
   # Construir hoja de Definiciones
   definiciones <- tribble(
@@ -28,7 +26,6 @@ exportar_reporte_final_2 <- function(tabla, analisis, ruta_archivo, archivos_ana
     "","",
     "---", "---",
     "RESULTADOS GENERALES", "",
-    "Registros excluidos por ser Epicrisis:", as.character(conteo_epicrisis),
     "Registros EXCLUIDOS por motivos clínicos:", as.character(analisis$counts$excluidos),
     "Registros CONTINUAR:", as.character(analisis$counts$continuan)
   )

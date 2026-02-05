@@ -61,8 +61,8 @@ cat("------------------------------------------------------------------\n")
 if (toupper(respuesta) == "Y") {
   
   # OPCIÓN Y: El usuario quiere el proceso largo
-  message("\n[ACCIÓN] Por favor, abra 'Reporte_Final.csv', complete los sexos faltantes,")
-  message("guárdelo como 'Tabla_Revisada_Completa.csv' y ejecute el script 'ejecutar_2.R'.")
+  message("\n[ACCIÓN] Por favor, abra 'Reporte_Final.csv', complete los sexos faltantes en la hoja 'Tabla_Pacientes',")
+  message("guárdelo como csv llamandola 'Tabla_Revisada_Completa', metala en la carpeta del proyecto y ejecute el script 'ejecutar_2.R'.")
   message("El programa finalizará ahora sin mover archivos físicos.\n")
   
 } else if (toupper(respuesta) == "N") {
