@@ -12,6 +12,7 @@ library(lubridate) # por si despues usamos fechas
 library(janitor) # adorn
 library(tibble) # para reporte final
 library(writexl) # para hacer el excel final
+library(googlesheets4)
 
 
 #para analisis

@@ -47,7 +47,7 @@ message("--- Generando analisis de resultados ---")
 exportar_reporte_final(
   tabla = tabla_final, 
   analisis = analisis_obj, 
-  ruta_archivo = file.path(path_proyecto, "Reporte_Final.xlsx"),
+  ruta_archivo = file.path(path_proyecto, "Reporte.xlsx"),
   archivos_analizados_str = str_archivos
 )
 
@@ -62,7 +62,9 @@ if (toupper(respuesta) == "Y") {
   
   # OPCIÓN Y: El usuario quiere el proceso largo
   message("\n[ACCIÓN] Por favor, abra 'Reporte_Final.csv', complete los sexos faltantes en la hoja 'Tabla_Pacientes',")
-  message("guárdelo como csv llamandola 'Tabla_Revisada_Completa', metala en la carpeta del proyecto y ejecute el script 'ejecutar_2.R'.")
+  message("Luego tiene dos opciones: ")
+  message(" A) guárdarlo como csv llamandola 'Tabla_Pacientes', metala en la carpeta del proyecto y ejecute el script 'ejecutar_2.R'.")
+  message(" B) en Google drive convertirlo a formato nativo (Archivo: Guardar como hoja de calculo de Google. Abrirlo, editar los sexos. copiar el url. Se usara en el script Ejecutar 2" )
   message("El programa finalizará ahora sin mover archivos físicos.\n")
   
 } else if (toupper(respuesta) == "N") {

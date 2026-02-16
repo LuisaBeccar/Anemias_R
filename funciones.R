@@ -39,15 +39,15 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
         es_inicio = stringr::str_detect(X1, "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ\\s]+\\s*(\\(\\d+\\)|\\d{1,2})?"),
         id_paciente_unico = cumsum(es_inicio) # 2. ID secuencial único: Cada paciente tendrá su propio número del 1 al n
       ) %>%
-      dplyr::filter(id_paciente_unico > 0) %>%
-      dplyr::group_by(id_paciente_unico) %>%
+      #dplyr::filter(id_paciente_unico > 0) %>%
+      #dplyr::group_by(id_paciente_unico) %>%
       dplyr::mutate(
-        id_4digitos = stringr::str_extract(dplyr::first(X1), "^\\d{4}"),
-        indice_str = sprintf("%03d", id_paciente_unico),
+        #id_4digitos = stringr::str_extract(dplyr::first(X1), "^\\d{4}"),
+        indice_str = sprintf("%05d", id_paciente_unico),
         # clave_aleatoria = stri_rand_strings(1, 5),  ## quizas no es necesario.. 
-        nombre_archivo = paste0(indice_str, "_", id_4digitos, ".txt") # opcional "_", clave_aleatoria,
-      ) %>%
-      dplyr::ungroup()
+        nombre_archivo = paste0(indice_str,  ".txt") # opcional "_", id_4digitos,"_", clave_aleatoria,
+      )# %>%
+      #dplyr::ungroup()
     
     # Verificación en consola
     num_pacientes <- length(unique(df_segmentado$nombre_archivo))
@@ -67,7 +67,7 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
 
 # herramientas
 
-# --- DNI HC FI FICM
+# --- DNI HC FI FICM # sera usada dentro de fx evaluar pacientes 
 extraer_dato_clinico <- function(texto, etiqueta) {
   patron <- paste0("(?i)", etiqueta, "[:\\s]*([\\d/\\.]+)")
   match <- stringr::str_match(texto, patron)
@@ -75,7 +75,7 @@ extraer_dato_clinico <- function(texto, etiqueta) {
 }
 
 
-# --- Hemoglobina inicial  # sera usada dentro de fx ecaluar pacientes 
+# --- Hemoglobina inicial  # sera usada dentro de fx evaluar pacientes 
 extraer_hb_inicial <- function(contenido, idx_lab) {
   # 1. Validación de seguridad inicial
   if (is.na(idx_lab) || idx_lab >= length(contenido)) {
@@ -124,19 +124,19 @@ extraer_hb_inicial <- function(contenido, idx_lab) {
 }
 
 
-# 4 ----------- excluyendo epicriris y duplicados
+# 4 ----------- excluyendo duplicados    BORRAR TODO LO DE EPICRISIS QUE NO VAMOS A USAR
 
 evaluar_pacientes <- function(path_pacientes, path_excluidos) {
   
   # 1. Configurar rutas de exclusión
   if (!dir.exists(path_excluidos)) dir.create(path_excluidos)
-  path_epicrisis <- file.path(path_excluidos, "Epicrisis")
-  if (!dir.exists(path_epicrisis)) dir.create(path_epicrisis, recursive = TRUE)
+  #path_epicrisis <- file.path(path_excluidos, "Epicrisis")
+  #if (!dir.exists(path_epicrisis)) dir.create(path_epicrisis, recursive = TRUE)
   
   pacientes_files <- list.files(path = path_pacientes, pattern = "\\.txt$", full.names = FALSE)
   regex_exclusion <- "((?<!tuvo |niega |sin |de )embaraz(?!os|.*(negativo|-))|gestac(?!.*(negativo|-))|hemorrag|politrauma|trauma(?!to|log|tolo))"
   registro_inicial <- list() 
-  conteo_epicrisis <- 0
+  #conteo_epicrisis <- 0
   
   for (p in pacientes_files) {
     ruta_origen <- file.path(path_pacientes, p)
@@ -149,8 +149,10 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
     # --- Extracción de Identidad ---
     linea_1 <- contenido[1]
     
+    n_cama_v <-  linea_1 %>% str_extract("^\\d{4}\\s*[-]?\\s*")
+    
     edad_raw <- linea_1 %>% 
-      str_remove("^\\d{4}\\s*[-]?\\s*") %>%
+      str_extract("^\\d{4}\\s*[-]?\\s*") %>%
       str_remove("\\s*[-]?\\s*.") %>% 
       str_extract("(?i)(\\(\\s*(edad\\s*)?\\d[\\s\\d]{1,3}(.*?)\\)|\\bedad[:\\s]*\\d[\\s\\d]{1,3}\\b|\\b\\d[\\s\\d]{1,3}\\s*(años?|ños|a|(?=\\s*-?DNI|\\s*-?HC|$)))")
     
@@ -191,7 +193,7 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
       !is.na(res_hb$valor) & res_hb$valor < 12.0  ~ "anemia basal",
       is.na(res_hb$valor)                         ~ "falta hb inicial",
       !is.na(res_hb$valor) & res_hb$valor >= 12.0 & res_hb$valor < 13.0 ~ "evaluar sexo",
-      TRUE                                        ~ "apto"
+      TRUE                                        ~ "sigue"
     )
     
     # --- Mover archivos excluidos (opcional) ---
@@ -201,12 +203,19 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
     
     # Almacenar en lista
     registro_inicial[[p]] <- tibble(
-      archivo = p, nombre = nombre_v, edad = edad_v, dni = dni_v, 
-      nro_hc = hc_v, f_internacion = fi_v, fi_clinica_medica = ficm_v,
-      f_hb_inicial = res_hb$fecha, hb_inicial = res_hb$valor, comentario = comentario_v
+      archivo = p,
+      cama = n_cama_v,
+      nombre = nombre_v,    # cuando publiquemos hay que borrar esta variable de nobmre
+      edad = edad_v, 
+      dni = dni_v, 
+      nro_hc = hc_v, 
+      f_internacion = fi_v, 
+      fi_clinica_medica = ficm_v,
+      f_hb_inicial = res_hb$fecha, 
+      hb_inicial = res_hb$valor, 
+      comentario = comentario_v
     )
-    
-  } # <-- AQUÍ FALTABA ESTA LLAVE (Cierre del bucle for)
+    } #Cierre del bucle for
   
   # 2. Consolidar y aplicar UNIQUE (distinct)
   df_final <- bind_rows(registro_inicial) %>%
@@ -216,7 +225,6 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
     mutate(across(where(is.character), ~ str_replace_all(., ",", "."))) %>%
     # Aseguramos que hb_inicial sea numérica
     mutate(hb_inicial = as.numeric(hb_inicial))
-  
   
   return(df_final)
   }
@@ -254,15 +262,13 @@ solicitar_sexo <- function(tabla) {
     dplyr::mutate(
       comentario = dplyr::case_when(
         sexo == "M" & comentario == "evaluar sexo" ~ "anemia basal",
-        sexo == "F" & comentario == "evaluar sexo" ~ "apto",
-        TRUE                                       ~ comentario
-      ),
-      decision = dplyr::if_else(comentario != "apto", "EXCLUIR", "CONTINUAR")
-    ) %>% 
+        sexo == "F" & comentario == "evaluar sexo" ~ "sigue",
+        TRUE                                       ~ comentario ),
+      decision = dplyr::if_else(comentario != "sigue","EXCLUIR", "CONTINUAR")) %>%   # asi los vacios continuan tambien
     dplyr::relocate(sexo, comentario, .after = hb_inicial) %>% 
     dplyr::relocate(decision, .after = dplyr::last_col())
   
-  return(tabla_procesada)  ## esta es la que se analizara en analisis y formara parte del reporte final
+  return(tabla_procesada)  ## esta es la que se analizara en analisis.R y formara parte del reporte final
 }
 
 # 6 --------------------------------------------------------------------------
@@ -294,48 +300,40 @@ organizar_archivos <- function(tabla, path_pacientes, path_excluidos) {
 
 # 7 --------------------------------------------------------------------------
 
+# despues de corregir o agregar sexos en google sheets, se volvio a cargar el csv y analizo denuevo anemias
+
 revision_tabla <- function(tabla) {
-  
-  # Guardamos el conteo de epicrisis que viene de la tabla original (si existe)
-  
+
   tabla_procesada <- tabla %>% 
     dplyr::mutate(
-      # 1. Determinamos si TIENE anemia según el sexo recién completado
-      motivo_anemia = dplyr::case_when(
-        sexo == "F" & hb_inicial < 12 ~ "anemia basal",
-        sexo == "M" & hb_inicial < 13 ~ "anemia basal",
-        TRUE                          ~ "apto"
-      ),
+      # 1. Determinamos si TIENE anemia según el sexo recién completado en el csv sheets
+      # en nueva columna que sera temporal
+                  motivo_anemia = dplyr::case_when(
+                    sexo == "F" & hb_inicial < 12 ~ "anemia basal",
+                    sexo == "M" & hb_inicial < 13 ~ "anemia basal",
+                    TRUE                          ~ "sigue" ),
       
       # 2. Lógica de pegado inteligente (comentario_3)
-      comentario_3 = dplyr::case_when(
-        # Caso A: Ya decía anemia basal y el nuevo cálculo confirma anemia basal -> No cambia
-        comentario == "anemia basal" & motivo_anemia == "anemia basal" ~ "anemia basal",
-        
-        # Caso B: Era "apto" pero ahora con el sexo es "anemia basal" -> Cambia a anemia
-        comentario == "apto" & motivo_anemia == "anemia basal" ~ "anemia basal",
-        
-        # Caso C: Tenía otro motivo (ej: "< 18") y además es anemia -> Los pega
-        comentario != "apto" & motivo_anemia == "anemia basal" & !str_detect(comentario, "anemia") ~ 
-          paste(comentario, "anemia basal", sep = " y "),
-        
-        # Caso D: En cualquier otro caso, mantenemos el comentario original
-        TRUE ~ comentario
-      )
-    ) %>% 
+      # esta complicado pero creo q cumple
+                  comentario_3 = dplyr::case_when(
+                    # Caso A: Ya decía anemia basal y el nuevo cálculo confirma anemia basal -> No cambia
+                    comentario == "evaluar sexo" & motivo_anemia == "anemia basal" ~ "anemia basal",
+                    
+                    # Caso C: Tenía otro motivo (ej: "< 18") y además es anemia -> Los pega
+                    comentario != "sigue" & comentario != "evaluar sexo" & motivo_anemia == "anemia basal" & !str_detect(comentario, "anemia") ~ 
+                      paste(comentario, "anemia basal", sep = " y "), # agrego que ademas de la causa clinica o edad tiene anemia basal
+                    
+                    # Caso D: En cualquier otro caso, mantenemos el comentario original
+                    TRUE ~ comentario )
+                  ) %>% 
     # 3. Limpieza y actualización de decisión
     dplyr::mutate(comentario_2 = comentario_3) %>% 
-    dplyr::select(-motivo_anemia, -comentario_3) %>% 
-    dplyr::mutate(
-      decision = dplyr::if_else(comentario_2 == "apto", "CONTINUAR", "EXCLUIR")
-    ) %>% 
+    dplyr::select(-motivo_anemia, -comentario_3) %>%  # queda comentario y comentario_2
+    dplyr::mutate(decision = dplyr::if_else(comentario_2 == "sigue", "CONTINUAR", "EXCLUIR")) %>%   # rechequeo la decision
     # 4. Reorganización estética
     dplyr::relocate(sexo, .after = hb_inicial) %>% 
     dplyr::relocate(comentario, comentario_2, .after = sexo) %>% 
     dplyr::relocate(decision, .after = dplyr::last_col())
-
-  }
   
   return(tabla_procesada)
 }
-##############################################################################

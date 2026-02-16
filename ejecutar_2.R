@@ -6,21 +6,33 @@ source("librerias.R")
 source("funciones.R")
 source("analisis_resultados.R")
 source("generar_reporte_2.R")
+source("generar_reporte.R")
+
+#gs4_auth(email = "luisabeccarvarela2@gmail.com") 
 
 # Rutas
 path_proyecto  <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/test_modularizado"
 path_pacientes <- file.path(path_proyecto, "Pacientes")
 path_excluidos <- file.path(path_pacientes, "Excluidos")
 
-# 1. Leer la tabla que completaste manualmente
-# Asegúrate de que el nombre coincida con tu archivo editado
-archivo_input <- file.path(path_proyecto, "Tabla_Revisada_Completa.csv")
+# 1. Leer la tabla que completaste manualmente opcion A o B
+
+# A)  Asegúrate de que el nombre coincida con tu archivo editado
+archivo_input <- file.path(path_proyecto, "Tabla_Pacientes.csv")
+
+# B) 
+#url_sheet <-  "https://docs.google.com/spreadsheets/d/1PHDEi2yHsdhyTLyzLlNA3KUjOjPlNoAx7sObaV-QL4A/edit?gid=979560414#gid=979560414"
+#url_sheet <- readline(prompt = "Peque aqui el url del GoogleSheet editado: ")
+#id_planilla <- "979560414"
+#archivo_input <- read_sheet(url_sheet, sheet = "Tabla_Pacientes")
+
+
 
 if (file.exists(archivo_input)) {
   
   # Leemos la tabla (ajusta el delimitador si usas  o CSV)
   tabla_revisada <- readr::read_delim(archivo_input, delim = ",", locale = locale(decimal_mark = ","))
-
+  #tabla_revisada <- archivo_input
   message("--- Iniciando Reevaluación de Datos Completos ---")
   
   # 2. Correr la función de revisión (la que combina comentarios)
@@ -30,12 +42,13 @@ if (file.exists(archivo_input)) {
   analisis_final <- analizando_resultados(tabla_ok)
   
   # 4. Generar el Reporte Final definitivo
-  str_archivos <- paste(basename(list.files(path_pacientes, pattern = "\\.txt$")), collapse = "; ")
+  str_archivos <- paste(basename(list.files(path_proyecto, pattern = "\\.txt$")), collapse = "; ")
+  
   
   exportar_reporte_final(
     tabla = tabla_ok, 
     analisis = analisis_final, 
-    ruta_archivo = file.path(path_proyecto, "Reporte_Final_DEFINITIVO.xlsx"),
+    ruta_archivo = file.path(path_proyecto, "Reporte_Final.xlsx"),
     archivos_analizados_str = str_archivos
   )
   
