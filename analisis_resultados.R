@@ -58,13 +58,15 @@ analizando_resultados <- function(tabla) {
   
 
   # C. Tabla resumida para biostats
-resumir_tabla <- tabla %>% 
+    resumir_tabla <- tabla %>% 
     #mutate(comentario_normalizado = str_remove(comentario, ",.*$")) %>% 
-    select(-c(archivo, nombre, dni, nro_hc, f_internacion, fi_clinica_medica, f_hb_inicial, comentario))
+    select(-c(archivo, cama, nombre, dni, nro_hc, f_internacion, fi_clinica_medica, f_hb_inicial, comentario)) %>% 
+    mutate(edad = as.numeric(edad),
+           hb_inicial = as.numeric(hb_inicial))
     
   
   # G. Biostats
-  bio_1 <- as.data.frame(biostats::summary_table(resumir_tabla)) %>% select(-any_of("normality"))
+  bio_1 <- as.data.frame(biostats::summary_table(resumir_tabla, all = TRUE)) %>% select(-any_of("normality"))
   bio_2 <- as.data.frame(biostats::summary_table(resumir_tabla, group_by = "decision", all = TRUE, exclude = "sexo"))
   
   # devolver todo en una lista organizada

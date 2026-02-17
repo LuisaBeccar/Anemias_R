@@ -124,45 +124,58 @@ extraer_hb_inicial <- function(contenido, idx_lab) {
 }
 
 
-# 4 ----------- excluyendo duplicados    BORRAR TODO LO DE EPICRISIS QUE NO VAMOS A USAR
+# 4 ----------- excluyendo duplicados
 
 evaluar_pacientes <- function(path_pacientes, path_excluidos) {
   
   # 1. Configurar rutas de exclusión
   if (!dir.exists(path_excluidos)) dir.create(path_excluidos)
-  #path_epicrisis <- file.path(path_excluidos, "Epicrisis")
-  #if (!dir.exists(path_epicrisis)) dir.create(path_epicrisis, recursive = TRUE)
   
   pacientes_files <- list.files(path = path_pacientes, pattern = "\\.txt$", full.names = FALSE)
   regex_exclusion <- "((?<!tuvo |niega |sin |de )embaraz(?!os|.*(negativo|-))|gestac(?!.*(negativo|-))|hemorrag|politrauma|trauma(?!to|log|tolo))"
   registro_inicial <- list() 
-  #conteo_epicrisis <- 0
   
   for (p in pacientes_files) {
     ruta_origen <- file.path(path_pacientes, p)
     
-    
-    ## resto de analisis si no dice epicrisis
     contenido <- read_lines(ruta_origen)
     if (length(contenido) < 2) next 
     
     # --- Extracción de Identidad ---
     linea_1 <- contenido[1]
     
-    n_cama_v <-  linea_1 %>% str_extract("^\\d{4}\\s*[-]?\\s*")
+    n_cama_v <-  linea_1 %>% str_extract("^\\d{4}") # str_extract("^\\d{4}\\s*[-]?\\s*")
     
-    edad_raw <- linea_1 %>% 
-      str_extract("^\\d{4}\\s*[-]?\\s*") %>%
-      str_remove("\\s*[-]?\\s*.") %>% 
-      str_extract("(?i)(\\(\\s*(edad\\s*)?\\d[\\s\\d]{1,3}(.*?)\\)|\\bedad[:\\s]*\\d[\\s\\d]{1,3}\\b|\\b\\d[\\s\\d]{1,3}\\s*(años?|ños|a|(?=\\s*-?DNI|\\s*-?HC|$)))")
+    # 2. Remove bed number from line to avoid confusion
+    linea_sin_cama <- linea_1 %>% str_remove("^\\d{4}\\s*-?\\s*")
     
-    edad_v <- if (!is.na(edad_raw)) as.numeric(str_remove_all(edad_raw, "[^0-9]")) else NA_real_
+    # 3. Extract age pattern from cleaned line
+    # edad_raw <- linea_sin_cama %>% 
+    #   str_extract("(?i)(\\(\\s*\\d{1,3}\\s*\\)|\\(\\s*edad\\s*\\d{1,3}\\s*\\)|edad[:\\s]*\\d{1,3}|\\d{1,3}\\s*años?)")
+    # 
+    # # 4. Convert to integer
+    # edad_v <- if (!is.na(edad_raw)) {
+    #   as.integer(str_extract(edad_raw, "\\d{1,3}"))
+    # } else {
+    #   NA_integer_
+    # }
+    edad_raw <- linea_sin_cama %>% 
+      str_extract("(?i)(\\(\\s*\\d{1,3}\\s*\\)|\\(\\s*edad\\s*\\d{1,3}\\s*\\)|edad[:\\s]*\\d{1,3}|[-,]\\s*\\d{1,3}(?:\\s|$)|\\d{1,3}\\s*años?|\\d{1,3}\\s*a?)")
     
-    nombre_v <- linea_1 %>%
-      str_replace("^\\d{4}\\s*[-]?\\s*", "") %>%
-      str_extract("(?i)^.*?(?=\\s*\\(\\s*(edad|\\d+)|\\s+edad|\\s+\\d+|\\s*(DNI|HC|FI)|$)") %>% 
-      str_remove_all("[-|,]") %>% 
-      str_trim() %>% 
+    edad_v <- if (!is.na(edad_raw)) {
+      as.integer(str_extract(edad_raw, "\\d{1,3}"))} else {NA_integer_}
+    
+    nombre_v <- linea_sin_cama %>%
+      # Extract letters/spaces before age/data markers
+      #str_extract("(?i)^.+?(?=\\s*\\(\\s*(?:edad\\s*)?\\d+|\\s+edad\\b|\\s+\\d{2,}\\s+año|\\s+DNI\\b|\\s+HC\\b|\\s+FI\\b|$)") %>% 
+      str_extract("(?i)^.+?(?=\\s*\\(\\s*(?:edad\\s*)?\\d+|\\s+edad\\b|\\s+\\d{2,}\\s+año|\\s*-\\s*\\d{1,3}(?:\\s|$)|\\s+DNI\\b|\\s+HC\\b|\\s+FI\\b|$)") %>% 
+      
+      # Remove file extensions and "epicrisis" word
+      str_remove_all("[-,]") %>%
+      str_remove("(?i)\\s*epicrisis\\s*\\.?\\s*docx?$") %>%
+      str_remove("(?i)\\.docx?$") %>%
+      str_trim() %>%
+      str_squish() %>%
       toupper()
     
     # --- Datos Clínicos (Líneas 1-5) ---
@@ -224,7 +237,8 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
     # Reemplazo de comas por puntos en columnas de texto
     mutate(across(where(is.character), ~ str_replace_all(., ",", "."))) %>%
     # Aseguramos que hb_inicial sea numérica
-    mutate(hb_inicial = as.numeric(hb_inicial))
+    mutate(hb_inicial = as.numeric(hb_inicial),
+           edad = as.integer(edad))
   
   return(df_final)
   }
@@ -240,7 +254,7 @@ solicitar_sexo <- function(tabla) {
   casos_evaluar <- which(tabla$comentario == "evaluar sexo")
   
   if (length(casos_evaluar) > 0) {
-    message("\n>>> SE REQUIERE REVISIÓN MANUAL DE SEXO PARA ", length(casos_evaluar), " CASOS <<<\n")
+    message("\n>>> SE REQUIERE SABER EL SEXO DE ", length(casos_evaluar), " CASOS <<<\n")
     
     for (i in casos_evaluar) {
       mensaje <- paste0("¿Es ", tabla$nombre[i], " de sexo MASCULINO? (Y/N): ")
@@ -333,7 +347,10 @@ revision_tabla <- function(tabla) {
     # 4. Reorganización estética
     dplyr::relocate(sexo, .after = hb_inicial) %>% 
     dplyr::relocate(comentario, comentario_2, .after = sexo) %>% 
-    dplyr::relocate(decision, .after = dplyr::last_col())
+    dplyr::relocate(decision, .after = dplyr::last_col()) %>% 
+    mutate(
+      edad = as.integer(edad),
+      hb_inicial = as.numeric(hb_inicial))
   
   return(tabla_procesada)
 }

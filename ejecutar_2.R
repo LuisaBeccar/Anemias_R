@@ -31,7 +31,10 @@ archivo_input <- file.path(path_proyecto, "Tabla_Pacientes.csv")
 if (file.exists(archivo_input)) {
   
   # Leemos la tabla (ajusta el delimitador si usas  o CSV)
-  tabla_revisada <- readr::read_delim(archivo_input, delim = ",", locale = locale(decimal_mark = ","))
+  tabla_revisada <- readr::read_delim(archivo_input, delim = ",", locale = locale(decimal_mark = ",")) 
+  tabla_revisada <- tabla_revisada %>% 
+    mutate(edad = as.integer(edad),
+           hb_inicial = as.numeric(hb_inicial))
   #tabla_revisada <- archivo_input
   message("--- Iniciando Reevaluación de Datos Completos ---")
   
