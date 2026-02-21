@@ -40,9 +40,10 @@ if (file.exists(archivo_input)) {
   
   # 2. Correr la función de revisión (la que combina comentarios)
   tabla_ok <- revision_tabla(tabla_revisada)
+  
   # 3. Nuevo análisis de resultados (actualiza métricas de Hb y conteos)
   analisis_final <- analizando_resultados(tabla_ok)
-
+  
   # 4. Generar el Reporte Final definitivo
   str_archivos <- paste(basename(list.files(path_proyecto, pattern = "\\.txt$")), collapse = "; ")
   
