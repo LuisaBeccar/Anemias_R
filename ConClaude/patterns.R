@@ -7,10 +7,9 @@ PATTERN_EDAD <- list(
 )
 
 # Combine into single pattern
-PATTERN_EDAD_COMPLETO <- paste(
-  "(?i)",
-  "(",
-  paste(PATTERN_EDAD, collapse = "|"),
+PATTERN_EDAD_COMPLETO <- paste0(
+  "(?i)(",
+  paste(unlist(PATTERN_EDAD), collapse = "|"),
   ")"
 )
 
@@ -24,12 +23,12 @@ PATTERN_NOMBRE_STOP <- list(
   end = "$"                                          # end of line
 )
 
-PATTERN_NOMBRE_STOP_COMPLETO <- paste(
+PATTERN_NOMBRE_STOP_COMPLETO <- paste0(
   "(?i)^.+?(?=",
-  paste(PATTERN_NOMBRE_STOP, collapse = "|"),
+  paste(unlist(PATTERN_NOMBRE_STOP), collapse = "|"),
   ")"
 )
 
-# Usage
-edad_raw <- linea_sin_cama %>% str_extract(PATTERN_EDAD_COMPLETO)
-nombre_v <- linea_sin_cama %>% str_extract(PATTERN_NOMBRE_STOP_COMPLETO)
+# Exclusion criteria pattern (pregnancy, hemorrhage, trauma)
+# Negative lookbehinds prevent false positives on negated mentions
+PATTERN_EXCLUSION <- "((?<!tuvo |niega |sin |de )embaraz(?!os|.*(negativo|-))|gestac(?!.*(negativo|-))|hemorrag|politrauma|trauma(?!to|log|tolo))"

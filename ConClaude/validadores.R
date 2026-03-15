@@ -40,19 +40,17 @@ validar_paciente <- function(paciente_row) {
     dni = validar_dni(paciente_row$dni)
   )
   
-  # Add validation column
-  paciente_row$validacion_issues <- paste(
-    validaciones$edad$mensaje,
-    validaciones$hb$mensaje,
-    validaciones$dni$mensaje,
-    sep = " | "
+  list(
+    validacion_issues = paste(
+      validaciones$edad$mensaje,
+      validaciones$hb$mensaje,
+      validaciones$dni$mensaje,
+      sep = " | "
+    ),
+    validacion_ok = all(
+      validaciones$edad$es_valido,
+      validaciones$hb$es_valido,
+      validaciones$dni$es_valido
+    )
   )
-  
-  paciente_row$validacion_ok <- all(
-    validaciones$edad$es_valido,
-    validaciones$hb$es_valido,
-    validaciones$dni$es_valido
-  )
-  
-  return(paciente_row)
 }

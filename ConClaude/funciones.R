@@ -22,21 +22,19 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
   # 2. Listar archivos .txt
   archivos_pendrive <- list.files(path = path_proyecto, pattern = "\\.txt$", full.names = TRUE)
   
+  if (length(archivos_pendrive) == 0) {
+    stop("No se encontraron archivos .txt en la ruta especificada.")
+  }
+  
   pb_seg <- progress_bar$new(
     format = "  Segmenting [:bar] :current/:total files",
     total = length(archivos_pendrive),
     clear = FALSE
   )
   
-  for (archivo_txt in archivos_pendrive) {
-    pb_seg$tick()
-    
-  if (length(archivos_pendrive) == 0) {
-    stop("No se encontraron archivos .txt en la ruta especificada.")
-  }
-  
   # 3. Procesar cada archivo
   for (archivo_txt in archivos_pendrive) {
+    pb_seg$tick()
     # Leer el archivo. Usamos read_delim del paquete readr
     temp_data <- readr::read_delim(archivo_txt, delim = "\n", col_names = "X1",
                                    show_col_types = FALSE, quote = "")
@@ -69,7 +67,7 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
     message(paste("Completado:", basename(archivo_txt)))
   }
   return(paste("Proceso finalizado. Archivos guardados en:", path_pacientes))
-}}
+}
 
 
 # 3 -------------------------------------------------------------------
@@ -135,10 +133,7 @@ extraer_hb_inicial <- function(contenido, idx_lab) {
 
 # 4 ----------- excluyendo duplicados
 
-evaluar_pacientes <- function(path_pacientes, path_excluidos) {
-  
-  # 1. Configurar rutas de exclusión
-  if (!dir.exists(path_excluidos)) dir.create(path_excluidos)
+evaluar_pacientes <- function(path_pacientes) {
   
   pacientes_files <- list.files(path = path_pacientes, pattern = "\\.txt$", full.names = FALSE)
   # Add progress bar
@@ -149,13 +144,11 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
     width = 80
   )
   
-  for (p in pacientes_files) {
-    pb$tick()  # Update progress
-  
-  regex_exclusion <- "((?<!tuvo |niega |sin |de )embaraz(?!os|.*(negativo|-))|gestac(?!.*(negativo|-))|hemorrag|politrauma|trauma(?!to|log|tolo))"
+  regex_exclusion <- PATTERN_EXCLUSION
   registro_inicial <- list() 
   
   for (p in pacientes_files) {
+    pb$tick()  # Update progress
     ruta_origen <- file.path(path_pacientes, p)
     
     contenido <- read_lines(ruta_origen)
@@ -170,26 +163,14 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
     linea_sin_cama <- linea_1 %>% str_remove("^\\d{4}\\s*-?\\s*")
     
     # 3. Extract age pattern from cleaned line
-    # edad_raw <- linea_sin_cama %>% 
-    #   str_extract("(?i)(\\(\\s*\\d{1,3}\\s*\\)|\\(\\s*edad\\s*\\d{1,3}\\s*\\)|edad[:\\s]*\\d{1,3}|\\d{1,3}\\s*años?)")
-    # 
-    # # 4. Convert to integer
-    # edad_v <- if (!is.na(edad_raw)) {
-    #   as.integer(str_extract(edad_raw, "\\d{1,3}"))
-    # } else {
-    #   NA_integer_
-    # }
-    edad_raw <- linea_sin_cama %>% 
-      str_extract("(?i)(\\(\\s*\\d{1,3}\\s*\\)|\\(\\s*edad\\s*\\d{1,3}\\s*\\)|edad[:\\s]*\\d{1,3}|[-,]\\s*\\d{1,3}(?:\\s|$)|\\d{1,3}\\s*años?|\\d{1,3}\\s*a?)")
+    edad_raw <- linea_sin_cama %>%
+      str_extract(PATTERN_EDAD_COMPLETO)
     
     edad_v <- if (!is.na(edad_raw)) {
       as.integer(str_extract(edad_raw, "\\d{1,3}"))} else {NA_integer_}
     
     nombre_v <- linea_sin_cama %>%
-      # Extract letters/spaces before age/data markers
-      #str_extract("(?i)^.+?(?=\\s*\\(\\s*(?:edad\\s*)?\\d+|\\s+edad\\b|\\s+\\d{2,}\\s+año|\\s+DNI\\b|\\s+HC\\b|\\s+FI\\b|$)") %>% 
-      str_extract("(?i)^.+?(?=\\s*\\(\\s*(?:edad\\s*)?\\d+|\\s+edad\\b|\\s+\\d{2,}\\s+año|\\s*-\\s*\\d{1,3}(?:\\s|$)|\\s+DNI\\b|\\s+HC\\b|\\s+FI\\b|$)") %>% 
-      
+      str_extract(PATTERN_NOMBRE_STOP_COMPLETO) %>%
       # Remove file extensions and "epicrisis" word
       str_remove_all("[-,]") %>%
       str_remove("(?i)\\s*epicrisis\\s*\\.?\\s*docx?$") %>%
@@ -228,11 +209,6 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
       !is.na(res_hb$valor) & res_hb$valor >= 12.0 & res_hb$valor < 13.0 ~ "evaluar sexo",
       TRUE                                        ~ "sigue"
     )
-    
-    # --- Mover archivos excluidos (opcional) ---
-    if (comentario_v %in% c("< 18 años", "embarazo", "hemorragia", "traumatismo")) {
-      file.rename(ruta_origen, file.path(path_excluidos, p))
-    }
     
     # Almacenar en lista
     registro_inicial[[p]] <- tibble(
@@ -280,7 +256,7 @@ evaluar_pacientes <- function(path_pacientes, path_excluidos) {
   
   
   return(df_final)
-  }}
+}
 
 # 5 --------------------------------------------------------------------------
 solicitar_sexo <- function(tabla) {

@@ -3,6 +3,8 @@
 # ==============================================================================
 
 source("librerias.R")
+source("config.R")
+source("patterns.R")
 source("funciones.R")
 source("analisis_resultados.R")
 source("generar_reporte_2.R")
@@ -11,7 +13,7 @@ source("generar_reporte.R")
 #gs4_auth(email = "luisabeccarvarela2@gmail.com") 
 
 # Rutas
-path_proyecto  <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/test_modularizado"
+path_proyecto  <- CONFIG$paths$proyecto
 path_pacientes <- file.path(path_proyecto, "Pacientes")
 path_excluidos <- file.path(path_pacientes, "Excluidos")
 

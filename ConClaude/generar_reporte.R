@@ -1,5 +1,5 @@
 
-exportar_reporte_final <- function(tabla, analisis, ruta_archivo, archivos_analizados_str) {
+exportar_reporte_final <- function(tabla, analisis, ruta_archivo, archivos_analizados_str, extraction_log = list()) {
   
   # Construir hoja de Definiciones
   definiciones <- tribble(
@@ -30,6 +30,9 @@ exportar_reporte_final <- function(tabla, analisis, ruta_archivo, archivos_anali
     "Registros CONTINUAR:", as.character(analisis$counts$continuan)
   )
   
+  # Calidad de datos
+  quality_report <- generar_reporte_calidad(tabla, extraction_log)
+  
   # Crear lista de hojas
   hojas <- list(
     "Definiciones" = definiciones,
@@ -40,7 +43,9 @@ exportar_reporte_final <- function(tabla, analisis, ruta_archivo, archivos_anali
     "Resumen_Exclusion" = analisis$excluidos,
     "HB_Totales" = analisis$hb_tot,
     "HB_Anemias" = analisis$hb_anemia,
-    "HB_Sin_Anemia" = analisis$hb_sin_anemia
+    "HB_Sin_Anemia" = analisis$hb_sin_anemia,
+    "Calidad_Datos" = quality_report$extraccion,
+    "Duplicados" = quality_report$duplicados
   )
   message("--- Generando reporte final ---")
   write_xlsx(hojas, ruta_archivo)

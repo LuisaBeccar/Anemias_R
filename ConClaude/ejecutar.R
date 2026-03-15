@@ -10,24 +10,19 @@ source("checkpoints.R")
 source("funciones.R")        # Must come after patterns.R
 source("analisis_resultados.R")
 source("generar_reporte.R")
-source("test_extraction.R")
-
-# NOW source logger (after config is loaded so path_proyecto exists)
-# But we need to set path_proyecto first!
+source("logger.R")           # Defines setup_logging and extraction_log
 
 #------------
-# Set paths (can eventually come from config.R)
-path_word <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/test_modularizado/"
-path_txt  <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/test_modularizado/"
-path_proyecto <- "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/test_modularizado"
+# Set paths from config.R
+path_word     <- CONFIG$paths$word
+path_txt      <- CONFIG$paths$txt
+path_proyecto <- CONFIG$paths$proyecto
+
 # Initialize logging (now that path_proyecto is set)
 setup_logging(path_proyecto)
 
 path_pacientes <- file.path(path_proyecto, "Pacientes")
 path_excluidos <- file.path(path_pacientes, "Excluidos")
-
-# NOW we can source logger (path_proyecto exists now)
-source("logger.R")
 
 #============================================================================
 # 4. EJECUCIÓN DEL FLUJO PASO A PASO
@@ -60,7 +55,7 @@ tabla_inicial_from_checkpoint <- ask_resume("tabla_inicial", path_proyecto)
 
 if (is.null(tabla_inicial_from_checkpoint)) {
   # No checkpoint found, run evaluation
-  tabla_inicial <- evaluar_pacientes(path_pacientes, path_excluidos)
+  tabla_inicial <- evaluar_pacientes(path_pacientes)
   save_checkpoint("tabla_inicial", tabla_inicial, path_proyecto)
 } else {
   # Checkpoint found and user accepted

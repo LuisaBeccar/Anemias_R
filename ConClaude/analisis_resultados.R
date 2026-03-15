@@ -131,9 +131,3 @@ generar_reporte_calidad <- function(tabla, extraction_log) {
   ))
 }
 
-# Add to report
-quality_report <- generar_reporte_calidad(tabla_final, extraction_log)
-
-# Add sheet to Excel
-hojas$Calidad_Datos <- quality_report$extraccion
-hojas$Duplicados <- quality_report$duplicados
