@@ -13,13 +13,66 @@ docx_a_txt <- function (ruta_archivos_docx, ruta_destino_txt) {
 }
 
 # 2 ----------------------------------------------------------
+# segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
+#   
+#   # 1. Crear carpetas de destino si no existen
+#   if (!dir.exists(path_pacientes)) dir.create(path_pacientes, recursive = TRUE)
+#   if (!dir.exists(path_excluidos)) dir.create(path_excluidos, recursive = TRUE)
+#   
+#   # 2. Listar archivos .txt
+#   archivos_pendrive <- list.files(path = path_proyecto, pattern = "\\.txt$", full.names = TRUE)
+#   
+#   if (length(archivos_pendrive) == 0) {
+#     stop("No se encontraron archivos .txt en la ruta especificada.")
+#   }
+#   
+#   pb_seg <- progress_bar$new(
+#     format = "  Segmenting [:bar] :current/:total files",
+#     total = length(archivos_pendrive),
+#     clear = FALSE
+#   )
+#   
+#   # 3. Procesar cada archivo
+#   for (archivo_txt in archivos_pendrive) {
+#     pb_seg$tick()
+#     # Leer el archivo. Usamos read_delim del paquete readr
+#     temp_data <- readr::read_delim(archivo_txt, delim = "\n", col_names = "X1",
+#                                    show_col_types = FALSE, quote = "")
+# 
+#     # Segmentación y limpieza
+#     df_segmentado <- temp_data %>%
+#       dplyr::mutate(
+#         # Identificar inicio de registro de paciente
+#         es_inicio = stringr::str_detect(X1, "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ\\s]+\\s*(\\(\\d+\\)|\\d{1,2})?"),
+#         id_paciente_unico = cumsum(es_inicio) # 2. ID secuencial único: Cada paciente tendrá su propio número del 1 al n
+#       ) %>%
+#       #dplyr::filter(id_paciente_unico > 0) %>%
+#       #dplyr::group_by(id_paciente_unico) %>%
+#       dplyr::mutate(
+#         #id_4digitos = stringr::str_extract(dplyr::first(X1), "^\\d{4}"),
+#         indice_str = sprintf("%05d", id_paciente_unico),
+#         # clave_aleatoria = stri_rand_strings(1, 5),  ## quizas no es necesario.. 
+#         nombre_archivo = paste0(indice_str,  ".txt") # opcional "_", id_4digitos,"_", clave_aleatoria,
+#       )# %>%
+#       #dplyr::ungroup()
+#     
+#     # Verificación en consola
+#     num_pacientes <- length(unique(df_segmentado$nombre_archivo))
+#     message(paste("Archivo:", basename(archivo_txt), "| Pacientes detectados:", num_pacientes))
+#     
+#     # 4. Guardar cada paciente por separado
+#     df_segmentado %>%
+#       dplyr::group_split(nombre_archivo) %>%
+#       purrr::walk(~ readr::write_lines(.x$X1, file.path(path_pacientes, unique(.x$nombre_archivo))))
+#     message(paste("Completado:", basename(archivo_txt)))
+#   }
+#   return(paste("Proceso finalizado. Archivos guardados en:", path_pacientes))
+# }
 segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
   
-  # 1. Crear carpetas de destino si no existen
   if (!dir.exists(path_pacientes)) dir.create(path_pacientes, recursive = TRUE)
   if (!dir.exists(path_excluidos)) dir.create(path_excluidos, recursive = TRUE)
   
-  # 2. Listar archivos .txt
   archivos_pendrive <- list.files(path = path_proyecto, pattern = "\\.txt$", full.names = TRUE)
   
   if (length(archivos_pendrive) == 0) {
@@ -32,43 +85,55 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
     clear = FALSE
   )
   
-  # 3. Procesar cada archivo
   for (archivo_txt in archivos_pendrive) {
     pb_seg$tick()
-    # Leer el archivo. Usamos read_delim del paquete readr
+    
     temp_data <- readr::read_delim(archivo_txt, delim = "\n", col_names = "X1",
                                    show_col_types = FALSE, quote = "")
-
-    # Segmentación y limpieza
+    
+    lineas <- temp_data$X1
+    n <- length(lineas)
+    
+    # --- NUEVA LÓGICA DE DETECCIÓN ---
+    # Una línea es inicio de paciente si:
+    # 1. Empieza con 4 dígitos seguidos de texto alfabético (patrón original)
+    # 2. Y dentro de las 2 líneas siguientes aparece al menos una etiqueta clínica
+    
+    PATRON_INICIO_CANDIDATO <- "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ]"
+    PATRON_ETIQUETAS        <- "(?i)(DNI|\\bHC\\b|\\bFI\\b|FICM)"
+    
+    es_inicio <- logical(n)
+    
+    for (i in seq_len(n)) {
+      if (stringr::str_detect(lineas[i], PATRON_INICIO_CANDIDATO)) {
+        # Ventana de validación: línea actual + 3 siguientes
+        ventana_fin <- min(i + 3, n)
+        ventana     <- paste(lineas[i:ventana_fin], collapse = " ")
+        # Es inicio real solo si la ventana contiene etiquetas clínicas
+        es_inicio[i] <- stringr::str_detect(ventana, PATRON_ETIQUETAS)
+      }
+    }
+    
     df_segmentado <- temp_data %>%
       dplyr::mutate(
-        # Identificar inicio de registro de paciente
-        es_inicio = stringr::str_detect(X1, "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ\\s]+\\s*(\\(\\d+\\)|\\d{1,2})?"),
-        id_paciente_unico = cumsum(es_inicio) # 2. ID secuencial único: Cada paciente tendrá su propio número del 1 al n
-      ) %>%
-      #dplyr::filter(id_paciente_unico > 0) %>%
-      #dplyr::group_by(id_paciente_unico) %>%
-      dplyr::mutate(
-        #id_4digitos = stringr::str_extract(dplyr::first(X1), "^\\d{4}"),
-        indice_str = sprintf("%05d", id_paciente_unico),
-        # clave_aleatoria = stri_rand_strings(1, 5),  ## quizas no es necesario.. 
-        nombre_archivo = paste0(indice_str,  ".txt") # opcional "_", id_4digitos,"_", clave_aleatoria,
-      )# %>%
-      #dplyr::ungroup()
+        es_inicio         = es_inicio,
+        id_paciente_unico = cumsum(es_inicio),
+        indice_str        = sprintf("%05d", id_paciente_unico),
+        nombre_archivo    = paste0(indice_str, ".txt")
+      )
     
-    # Verificación en consola
     num_pacientes <- length(unique(df_segmentado$nombre_archivo))
     message(paste("Archivo:", basename(archivo_txt), "| Pacientes detectados:", num_pacientes))
     
-    # 4. Guardar cada paciente por separado
     df_segmentado %>%
       dplyr::group_split(nombre_archivo) %>%
       purrr::walk(~ readr::write_lines(.x$X1, file.path(path_pacientes, unique(.x$nombre_archivo))))
+    
     message(paste("Completado:", basename(archivo_txt)))
   }
+  
   return(paste("Proceso finalizado. Archivos guardados en:", path_pacientes))
 }
-
 
 # 3 -------------------------------------------------------------------
 
@@ -191,9 +256,11 @@ evaluar_pacientes <- function(path_pacientes) {
     hallazgo_exclusion <- str_extract(texto_completo, regex_exclusion)
     
     hallazgo_normalizado <- case_when(
-      str_detect(hallazgo_exclusion, "embaraz|gestac") ~ "embarazo",
-      str_detect(hallazgo_exclusion, "hemorrag")      ~ "hemorragia",
-      str_detect(hallazgo_exclusion, "politrauma|trauma") ~ "traumatismo",
+      str_detect(hallazgo_exclusion, regex(PATTERN_EMBARAZO,  ignore_case = TRUE)) ~ "embarazo",
+      str_detect(hallazgo_exclusion, regex(PATTERN_GESTACION, ignore_case = TRUE)) ~ "embarazo",
+      str_detect(hallazgo_exclusion, regex(PATTERN_HEMORRAGIA,ignore_case = TRUE)) ~ "hemorragia",
+      str_detect(hallazgo_exclusion, regex(PATTERN_POLITRAUMA,ignore_case = TRUE)) ~ "traumatismo",
+      str_detect(hallazgo_exclusion, regex(PATTERN_TRAUMA,    ignore_case = TRUE)) ~ "traumatismo",
       TRUE ~ NA_character_
     )
     

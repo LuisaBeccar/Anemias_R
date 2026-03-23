@@ -9,16 +9,12 @@ CONFIG <- list(
   
   # Extraction parameters
   extraction = list(
-    hb_range = c(3.0, 45.0),
+    hb_range = c(2.0, 35.0),
     edad_minima = 18,
     edad_maxima = 120,
     lab_search_lines = 10  # How many lines to search after "LABORATORIOS:"
   ),
   
-  # Regex patterns (from patterns.R)
-  patterns = list(
-    exclusion = "((?<!tuvo |niega |sin |de )embaraz(?!os|.*(negativo|-))|gestac(?!.*(negativo|-))|hemorrag|politrauma|trauma(?!to|log|tolo))"
-  ),
   
   # Report settings
   report = list(
@@ -29,10 +25,3 @@ CONFIG <- list(
                      "HB_Anemias", "HB_Sin_Anemia")
   )
 )
-
-# Usage in other files
-source("config.R")
-
-path_proyecto <- CONFIG$paths$proyecto
-hb_min <- CONFIG$extraction$hb_range[1]
-hb_max <- CONFIG$extraction$hb_range[2]

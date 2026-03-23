@@ -29,7 +29,7 @@ validar_dni <- function(dni) {
   es_numerico <- !is.na(dni) && str_detect(dni, "^\\d{7,8}$")
   list(
     es_valido = es_numerico,
-    mensaje = if_else(es_numerico, "OK", "DNI formato inválido")
+    mensaje = if_else(es_numerico, "OK", "revisar DNI")
   )
 }
 

@@ -136,11 +136,9 @@ if (toupper(respuesta) == "Y") {
   message("1. Abra 'Reporte.xlsx'")
   message("2. Vaya a la hoja 'Tabla_Pacientes'")
   message("3. Complete los sexos faltantes manualmente")
-  message("4. Exporte como CSV o edite en Google Sheets")
   message("")
   message("Opciones para continuar:")
   message("  A) Guardar como 'Tabla_Pacientes.csv' en la carpeta del proyecto")
-  message("  B) Subir a Google Sheets y obtener el URL")
   message("")
   message("5. Ejecute 'ejecutar_2.R' cuando esté listo")
   message("")
@@ -154,7 +152,7 @@ if (toupper(respuesta) == "Y") {
   # Organizar archivos según decisiones
   organizar_archivos(tabla_final, path_pacientes, path_excluidos)
   
-  message("\n✅ Proceso finalizado con éxito (sin reevaluación manual)\n")
+  message("\n✅ Proceso finalizado con éxito (sin reevaluación manual) \n")
   
 } else {
   message("\n❌ Opción no válida. No se realizaron movimientos de archivos.")
