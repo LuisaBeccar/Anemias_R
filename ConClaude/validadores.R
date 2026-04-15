@@ -14,11 +14,11 @@ validar_edad <- function(edad) {
 
 validar_hb <- function(hb) {
   list(
-    es_valido = !is.na(hb) && hb >= 3.0 && hb <= 20.0,
+    es_valido = !is.na(hb) && hb >= 1.0 && hb <= 20.0,
     mensaje = case_when(
       is.na(hb) ~ "HB faltante",
       hb < 3.0 ~ "HB demasiaaado baja (<3)",
-      hb > 30.0 ~ "HB demasiado alta sospechosa (>20)",
+      hb > 18.0 ~ "HB demasiado alta sospechosa (>18)",
       TRUE ~ "OK"
     )
   )
