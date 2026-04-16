@@ -19,15 +19,8 @@ path_excluidos <- file.path(path_pacientes, "Excluidos")
 
 # 1. Leer la tabla que completaste manualmente opcion A o B
 
-# A)  Asegúrate de que el nombre coincida con tu archivo editado
+#  Asegúrate de que el nombre coincida con tu archivo editado
 archivo_input <- file.path(path_proyecto, "Tabla_Pacientes.csv")
-
-# B) 
-#url_sheet <-  "https://docs.google.com/spreadsheets/d/1PHDEi2yHsdhyTLyzLlNA3KUjOjPlNoAx7sObaV-QL4A/edit?gid=979560414#gid=979560414"
-#url_sheet <- readline(prompt = "Peque aqui el url del GoogleSheet editado: ")
-#id_planilla <- "979560414"
-#archivo_input <- read_sheet(url_sheet, sheet = "Tabla_Pacientes")
-
 
 
 if (file.exists(archivo_input)) {

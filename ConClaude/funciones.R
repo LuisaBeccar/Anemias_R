@@ -411,9 +411,9 @@ revision_tabla <- function(tabla) {
       
       # 2. Lógica de pegado inteligente (comentario_3)
       # esta complicado pero creo q cumple
-                  comentario_3 = dplyr::case_when(
+                  comentario = dplyr::case_when(
                     # Caso A: Ya decía anemia basal y el nuevo cálculo confirma anemia basal -> No cambia
-                    comentario == "evaluar sexo" & motivo_anemia == "anemia basal" ~ "anemia basal",
+                    comentario == "evaluar sexo" & motivo_anemia == "anemia basal" ~ paste(comentario, "--> anemia basal"),
                     
                     # Caso C: Tenía otro motivo (ej: "< 18") y además es anemia -> Los pega
                     comentario != "sigue" & comentario != "evaluar sexo" & motivo_anemia == "anemia basal" & !str_detect(comentario, "anemia") ~ 
@@ -423,12 +423,12 @@ revision_tabla <- function(tabla) {
                     TRUE ~ comentario )
                   ) %>% 
     # 3. Limpieza y actualización de decisión
-    dplyr::mutate(comentario_2 = comentario_3) %>% 
-    dplyr::select(-motivo_anemia, -comentario_3) %>%  # queda comentario y comentario_2
-    dplyr::mutate(decision = dplyr::if_else(comentario_2 == "sigue", "CONTINUAR", "EXCLUIR")) %>%   # rechequeo la decision
+    #dplyr::mutate(comentario_2 = comentario_3) %>% 
+    dplyr::select(-motivo_anemia) %>%  # , -comentario_3  queda comentario y comentario_2 // mute comentario por comentario2
+    dplyr::mutate(decision = dplyr::if_else(comentario == "sigue", "CONTINUAR", "EXCLUIR")) %>%   # rechequeo la decision
     # 4. Reorganización estética
     dplyr::relocate(sexo, .after = hb_inicial) %>% 
-    dplyr::relocate(comentario, comentario_2, .after = sexo) %>% 
+    dplyr::relocate(comentario, .after = sexo) %>% 
     dplyr::relocate(decision, .after = dplyr::last_col()) %>% 
     mutate(
       edad = as.integer(edad),

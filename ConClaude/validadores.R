@@ -5,7 +5,7 @@ validar_edad <- function(edad) {
     es_valido = !is.na(edad) && edad >= 18 && edad <= 120,
     mensaje = case_when(
       is.na(edad) ~ "Edad faltante",
-      edad < 18 ~ "Edad menor a 18 (ya debe estar excluido)",
+      edad < 18 ~ "Edad menor a 18",
       edad > 120 ~ "Edad sospechosa (>120 años)",
       TRUE ~ "OK"
     )
@@ -18,7 +18,7 @@ validar_hb <- function(hb) {
     mensaje = case_when(
       is.na(hb) ~ "HB faltante",
       hb < 3.0 ~ "HB demasiaaado baja (<3)",
-      hb > 18.0 ~ "HB demasiado alta sospechosa (>18)",
+      hb > 18.0 ~ "HB alta sospechosa (<18)",
       TRUE ~ "OK"
     )
   )
