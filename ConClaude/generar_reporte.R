@@ -26,6 +26,8 @@ exportar_reporte_final <- function(tabla, analisis, ruta_archivo, archivos_anali
     "validacion_issues", "Breve descripción de los problemas de calidad detectados en edad, hb y dni",
     "validacion_ok","Indicador booleano de integridad del registro si los tres campos de validacoin_issues son OK: TRUE, si no: FALSE",
     "decision","Si comentario es apto, podria CONTINUAL la evaluacion, si tiene algun motivo de exclusión, la decision será EXLUIR",
+    "calidad datos","Tabla con las metricas de extraccion de datos existentes en cada variable",
+    "duplicados","Reporte de registros duplicados segun campos: nombre, dni, f_internacion, fi_clinica_medica, hb_inicial",
     "","",
     "---", "---",
     "RESULTADOS GENERALES", "",

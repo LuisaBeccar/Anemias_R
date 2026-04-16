@@ -10,8 +10,6 @@ source("analisis_resultados.R")
 source("generar_reporte_2.R")
 source("generar_reporte.R")
 
-#gs4_auth(email = "luisabeccarvarela2@gmail.com") 
-
 # Rutas
 path_proyecto  <- CONFIG$paths$proyecto
 path_pacientes <- file.path(path_proyecto, "Pacientes")
@@ -36,14 +34,15 @@ if (file.exists(archivo_input)) {
   # 2. Correr la función de revisión (la que combina comentarios)
   tabla_ok <- revision_tabla(tabla_revisada)
   
-  # 3. Nuevo análisis de resultados (actualiza métricas de Hb y conteos)
+  # # 3. Nuevo análisis de resultados (actualiza métricas de Hb y conteos)
+  # analisis_final <- analizando_resultados(tabla_ok)
+  message("\n--- Generando análisis de resultados ---")
   analisis_final <- analizando_resultados(tabla_ok)
   
-  # 4. Generar el Reporte Final definitivo
-  str_archivos <- paste(basename(list.files(path_proyecto, pattern = "\\.txt$")), collapse = "; ")
-  
-  
-  exportar_reporte_final(
+  # # 4. Generar el Reporte Final definitivo
+  # str_archivos <- paste(basename(list.files(path_proyecto, pattern = "\\.txt$")), collapse = "; ")
+  # message("\n--- Generando reporte Excel ---")
+  exportar_reporte_final_2(
     tabla = tabla_ok, 
     analisis = analisis_final, 
     ruta_archivo = file.path(path_proyecto, "Reporte_Final.xlsx"),
@@ -55,7 +54,11 @@ if (file.exists(archivo_input)) {
   message("--- Organizando archivos en carpetas finales ---")
   organizar_archivos(tabla_ok, path_pacientes, path_excluidos)
   
-  message("--- Proceso completado exitosamente ---")
+  # # Save original filenames for workflow 2
+  # saveRDS(str_archivos_2, file.path(path_proyecto, "archivos_analizados.rds"))
+  
+  message(paste("\n✅ Reporte generado con éxito en:", path_proyecto))
+  
   
 } else {
   stop("No se encontró el archivo: ", archivo_input)

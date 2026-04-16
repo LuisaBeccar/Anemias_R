@@ -1,13 +1,13 @@
 
-exportar_reporte_final_2 <- function(tabla, analisis, ruta_archivo, archivos_analizados_str) {
+exportar_reporte_final_2 <- function(tabla, analisis_final, ruta_archivo, archivos_analizados_str) {
   
   # Construir hoja de Definiciones
   definiciones <- tribble(
     ~Concepto , ~Definicion,
     "","",
     "Archivos analizados:", archivos_analizados_str,
-    "Nro de sub-archivos:", as.character(analisis$counts$n_archivos),
-    "Pacientes únicos (Nombre+DNI):", as.character(analisis$counts$n_dni),
+    "Nro de sub-archivos:", as.character(analisis_final$counts$n_archivos),
+    "Pacientes únicos (Nombre+DNI):", as.character(analisis_final$counts$n_dni),
     "---", "---",
     "","",
     "Hoja:","Tabla Pacientes",
@@ -26,21 +26,25 @@ exportar_reporte_final_2 <- function(tabla, analisis, ruta_archivo, archivos_ana
     "","",
     "---", "---",
     "RESULTADOS GENERALES", "",
-    "Registros EXCLUIDOS por motivos clínicos:", as.character(analisis$counts$excluidos),
-    "Registros CONTINUAR:", as.character(analisis$counts$continuan)
+    "Registros EXCLUIDOS por motivos clínicos:", as.character(analisis_final$counts$excluidos),
+    "Registros CONTINUAR:", as.character(analisis_final$counts$continuan)
   )
+  # Calidad de datos
+  quality_report_2 <- generar_reporte_calidad(tabla_ok, extraction_log)
   
   # Crear lista de hojas
   hojas <- list(
     "Definiciones" = definiciones,
-    "Tabla_Pacientes" = tabla,
-    "Vacios" = analisis$vacios,
-    "Biostats_Gral" = analisis$bio1,
-    "Biostats_Decision" = analisis$bio2,
-    "Resumen_Exclusion" = analisis$excluidos,
-    "HB_Totales" = analisis$hb_tot,
-    "HB_Anemias" = analisis$hb_anemia,
-    "HB_Sin_Anemia" = analisis$hb_sin_anemia
+    "Tabla_Pacientes" = tabla_ok,
+    "Vacios" = analisis_final$vacios,
+    "Biostats_Gral" = analisis_final$bio1,
+    "Biostats_Decision" = analisis_final$bio2,
+    "Resumen_Exclusion" = analisis_final$excluidos,
+    "HB_Totales" = analisis_final$hb_tot,
+    "HB_Anemias" = analisis_final$hb_anemia,
+    "HB_Sin_Anemia" = analisis_final$hb_sin_anemia,
+    "Calidad_Datos" = quality_report_2$extraccion,
+    "Duplicados" = quality_report_2$duplicados
   )
   message("--- Generando reporte final ---")
   write_xlsx(hojas, ruta_archivo)
