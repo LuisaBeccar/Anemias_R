@@ -1,17 +1,22 @@
 # Anemias_R
 
+<br>
 
-la logica funciona. 
-fixes necesarios
+## marzo 2026 <br>
+- proyecto continuado en Subcarpeta conClaude <br>
+- proximamamente readme y limpieza <br>
 
+<br>
 
-3) las etiquetas de comentario_2 cheqear que sean correctas 
-
-4) reporte 2 dice que definiciones hay algun dato que no esta bien, 
-y en el reporte se ve sin datos lo de la hoja definiciones
-
-
-5) ver si en generar reorte quiero tambien que aparezca cuantos estaban duplicados, osea cuantos archivos hay apenas se segmenta 
-y luego cuantos fueron epicrisis y cuantos quedaron 
-y cuantos quedaron al poner el distinct completo.
-luego habra q ver y que en la lista se podra ordenar por nombre y eliminar si hay duplicados que no dice epiciris pero otros datos parecido o nombre apellodo vs apellido nombre 
+## 21 abril <br>
+- ConClaude sera el main, archivo el resto en (deprecado) <br>
+- duplico con Claude a V3 para seguir con las indicaciones de la investigadora: <br>
+  + sin deduplicar (cometar el codigo no eliminar)
+  + agregar columna con nombre de archivote fuente para trazabilidad
+  + sin fecha internacion general, sin hemoglobina inicial del archivo ni su fecha
+  + sin hb no hay que definir sexo --> no se hara ejecusion ni analisis 2, se eliminan esos archivos
+  + se eliminan analisis de hb
+  + se modifica reporte
+  + 
+  PENDIENTE
+  0 nuevo set de archivos a probar
