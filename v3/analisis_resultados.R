@@ -27,9 +27,9 @@ analizando_resultados <- function(tabla) {
     ungroup() %>% 
     janitor::adorn_totals(where = "row", name = "TOTAL EXCLUIDOS")
  
-  # D. Tabla resumida para biostats
+  # D. Tabla resumida para 
     resumir_tabla <- tabla %>% 
-    select(-c(archivo, cama, nombre, dni, nro_hc, fi_clinica_medica, comentario)) %>%  
+    select(-c(archivo, cama, nombre, dni,  fi_clinica_medica, comentario)) %>%   #nro_hc,
     mutate(edad = as.numeric(edad))
    
   # devolver todo en una lista organizada
@@ -44,14 +44,14 @@ generar_reporte_calidad <- function(tabla, extraction_log) {
   
   # Extraction success rates
   extraccion_stats <- tibble(
-    campo = c("cama", "nombre", "edad", "dni",  "nro_hc", "fi_clinica_medica"), 
+    campo = c("cama", "nombre", "edad", "dni",   "fi_clinica_medica"), #"nro_hc",
     total = nrow(tabla),
     extraidos = c(
       sum(!is.na(tabla$cama)),
       sum(!is.na(tabla$nombre)),
       sum(!is.na(tabla$edad)),
       sum(!is.na(tabla$dni)),
-      sum(!is.na(tabla$nro_hc)),
+      #sum(!is.na(tabla$nro_hc)),
       sum(!is.na(tabla$fi_clinica_medica))
     )
   ) %>%

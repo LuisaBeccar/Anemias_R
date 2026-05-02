@@ -77,7 +77,9 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
         #  
         indice_str = sprintf("%05d", id_paciente_unico),
         nombre_archivo = paste0(indice_str, ".txt")
-      )
+      ) %>% 
+      # ✅ NUEVO: descarta todo lo que aparece antes del primer paciente detectado
+      dplyr::filter(id_paciente_unico > contador_global)
     
     num_pacientes <- length(unique(df_segmentado$nombre_archivo))
     message(paste("Archivo:", nombre_origen, "| Pacientes detectados:", num_pacientes))
