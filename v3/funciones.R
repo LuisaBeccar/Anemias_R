@@ -174,7 +174,7 @@ evaluar_pacientes <- function(path_pacientes) {
       val <- extraer_dato_clinico(bloque_clinico, "DNI")
       if (is.na(val) || is.null(val)) extraer_dato_clinico(bloque_clinico, "DOC") else val
     }
-    hc_v   <- extraer_dato_clinico(bloque_clinico, "HC")
+    #hc_v   <- extraer_dato_clinico(bloque_clinico, "HC")
     ficm_v <- extraer_dato_clinico(bloque_clinico, "FICM")
     
     # --- Exclusiones y Laboratorio ---
@@ -205,7 +205,7 @@ evaluar_pacientes <- function(path_pacientes) {
       nombre = nombre_v,    # cuando publiquemos hay que borrar esta variable de nobmre
       edad = edad_v, 
       dni = dni_v, 
-      nro_hc = hc_v, 
+     # nro_hc = hc_v, 
       fi_clinica_medica = ficm_v,
       comentario = comentario_v
     )
