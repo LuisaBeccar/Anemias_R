@@ -55,7 +55,7 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
     # 2. Y dentro de las 3 líneas siguientes aparece al menos una etiqueta clínica
     
     PATRON_INICIO_CANDIDATO <- "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ]"
-    PATRON_ETIQUETAS        <- "(?i)(DNI|\\bHC\\b|\\bFI\\b|FICM)"
+    PATRON_ETIQUETAS        <- "(?i)(DNI|DOC|\\bHC\\b|\\bFI\\b|FICM)"
     
     es_inicio <- logical(n)
     
@@ -114,7 +114,7 @@ extraer_dato_clinico <- function(texto, etiqueta) {
   if (!is.na(match[1, 2])) return(stringr::str_trim(match[1, 2])) else return(NA_character_)
 }
 
-# 4 ----------- excluyendo duplicados
+# 4 ----------- 
 
 evaluar_pacientes <- function(path_pacientes) {
   
@@ -169,7 +169,11 @@ evaluar_pacientes <- function(path_pacientes) {
     
     # --- Datos Clínicos (Líneas 1-5) ---
     bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
-    dni_v  <- extraer_dato_clinico(bloque_clinico, "DNI")
+   # dni_v  <- extraer_dato_clinico(bloque_clinico, "DNI|DOC")
+    dni_v <- {
+      val <- extraer_dato_clinico(bloque_clinico, "DNI")
+      if (is.na(val) || is.null(val)) extraer_dato_clinico(bloque_clinico, "DOC") else val
+    }
     hc_v   <- extraer_dato_clinico(bloque_clinico, "HC")
     ficm_v <- extraer_dato_clinico(bloque_clinico, "FICM")
     
