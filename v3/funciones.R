@@ -106,7 +106,8 @@ docx_a_txt <- function (ruta_archivos_docx, ruta_destino_txt) {
 #   return(paste("Proceso finalizado. Archivos guardados en:", path_pacientes))
 # }
 
-## Claude 9 mayo tras chrash por uso excesivo de memoria 
+## --- c/ Claude 9 mayo --- tras chrash por uso excesivo de memoria 
+
 evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
   
   mapa_origen <- readr::read_csv(
@@ -124,6 +125,7 @@ evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
   indices     <- seq_along(pacientes_files)
   grupos      <- split(pacientes_files, ceiling(indices / batch_size))
   n_batches   <- length(grupos)
+  # Resolver patrón de exclusión una vez antes del loop (evita búsqueda global en cada iteración)
   regex_exclusion <- PATTERN_EXCLUSION
   
   for (b in seq_len(n_batches)) {
