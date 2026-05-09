@@ -90,7 +90,14 @@ saveRDS(str_archivos, file.path(path_proyecto, "archivos_analizados.rds"))
 message(paste("\n✅ Reporte generado con éxito en:", path_proyecto))
 
 #============================================================================
-# Paso H: Exportar logs
+# Paso F: Ordenar Excluidos
+#============================================================================
+message("\n--- Ordenando excluidos---")
+
+organizar_archivos(tabla_inicial,path_pacientes,path_excluidos)
+
+#============================================================================
+# Paso G: Exportar logs
 #============================================================================
 
 # Export extraction issues log if any were recorded
