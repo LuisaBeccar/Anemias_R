@@ -7,9 +7,9 @@ analizando_resultados <- function(tabla) {
   resumen_counts <- list(
     n_archivos = n_distinct(tabla$archivo),
     n_dni = n_distinct(tabla$nombre, tabla$dni),
-    n_nombres = n_distinct(tabla$nombre),
-    continuan = sum(tabla$decision == "CONTINUAR"),
-    excluidos = sum(tabla$decision == "EXCLUIR")
+    n_nombres = n_distinct(tabla$nombre)#,
+   # continuan = sum(tabla$decision == "CONTINUAR"),
+   # excluidos = sum(tabla$decision == "EXCLUIR")
   )
   
   # B. Tabla de vacíos
@@ -21,11 +21,11 @@ analizando_resultados <- function(tabla) {
  
   # C. Grupos de exclusión
   grupos_excluidos <- tabla %>% 
-    filter(decision == "EXCLUIR") %>% 
+    #filter(decision == "EXCLUIR") %>% 
     group_by(comentario) %>% 
     count() %>% 
-    ungroup() %>% 
-    janitor::adorn_totals(where = "row", name = "TOTAL EXCLUIDOS")
+    ungroup() #%>% 
+   # janitor::adorn_totals(where = "row", name = "TOTAL EXCLUIDOS")
  
   # D. Tabla resumida para 
     resumir_tabla <- tabla %>% 
@@ -36,7 +36,8 @@ analizando_resultados <- function(tabla) {
   return(list(
     counts = resumen_counts,
     vacios = vacios,
-    excluidos = grupos_excluidos))
+    excluidos = grupos_excluidos
+    ))
   } # cierro la funcion
 
 
@@ -44,14 +45,13 @@ generar_reporte_calidad <- function(tabla, extraction_log) {
   
   # Extraction success rates
   extraccion_stats <- tibble(
-    campo = c("cama", "nombre", "edad", "dni",   "fi_clinica_medica"), #"nro_hc",
+    campo = c("cama", "nombre", "edad", "dni",   "fi_clinica_medica"),
     total = nrow(tabla),
     extraidos = c(
       sum(!is.na(tabla$cama)),
       sum(!is.na(tabla$nombre)),
       sum(!is.na(tabla$edad)),
       sum(!is.na(tabla$dni)),
-      #sum(!is.na(tabla$nro_hc)),
       sum(!is.na(tabla$fi_clinica_medica))
     )
   ) %>%
@@ -65,7 +65,7 @@ generar_reporte_calidad <- function(tabla, extraction_log) {
     summarise(
       total_pacientes = n(),
       edad_valida = sum(edad >= 18 & edad <= 120, na.rm = TRUE),
-      dni_valido = sum(str_detect(dni, "^\\d{7,8}$"), na.rm = TRUE)
+      dni_valido = sum(str_detect(dni, "^\\d{7,10}$"), na.rm = TRUE)
     )
   
   # Duplicates analysis
@@ -73,7 +73,7 @@ generar_reporte_calidad <- function(tabla, extraction_log) {
     group_by(nombre, dni) %>%   # 
     filter(n() > 1) %>%
     summarise(
-      n_duplicados = n(),
+      n_duplicados = n(),   
       archivos = paste(archivo, collapse = ", ")
     )
   

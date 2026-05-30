@@ -36,7 +36,7 @@ docx_a_txt(path_word, path_txt)
 # Paso B: Segmentar el archivo grande en pacientes individuales
 #============================================================================
 message("--- Iniciando segmentación de pacientes ---")
-segmentar_pacientes(path_proyecto, path_pacientes, path_excluidos) 
+segmentar_pacientes(path_txt, path_pacientes, path_excluidos) 
 
 # Save checkpoint after segmentation
 save_checkpoint("segmentation_complete", 
@@ -58,12 +58,18 @@ tabla_inicial_from_checkpoint <- ask_resume("tabla_inicial", path_proyecto)
 if (is.null(tabla_inicial_from_checkpoint)) {
   # No checkpoint found, run evaluation
   tabla_inicial <- evaluar_pacientes(path_pacientes)
-  tabla_inicial <- clasificar(tabla_inicial)
+  #tabla_inicial <- clasificar(tabla_inicial)
   save_checkpoint("tabla_inicial", tabla_inicial, path_proyecto)
 } else {
   # Checkpoint found and user accepted
   tabla_inicial <- tabla_inicial_from_checkpoint
 }
+
+# # si aparece un error como: 
+# # """ Error en file(con, "rb"): no se puede abrir la conexión Además: Aviso: In file(con, "rb") :  
+# #  no fue posible abrir el archivo 'C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/pruevaV3/Pacientes/00003.txt':
+# #  Permission denied Called from: file(con, "rb")"""
+# # --------- solo esperar un poquito, es porque onedrive esta cargando
 
 #============================================================================
 # Paso D: Análisis estadístico

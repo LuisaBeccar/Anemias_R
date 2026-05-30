@@ -54,18 +54,28 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
     # 1. Empieza con 4 dígitos seguidos de texto alfabético (patrón original)
     # 2. Y dentro de las 3 líneas siguientes aparece al menos una etiqueta clínica
 
-    PATRON_INICIO_CANDIDATO <- "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ]"
-    PATRON_ETIQUETAS        <- "(?i)(DNI|DOC|\\bHC\\b|\\bFI\\b|FICM)"
+    PATRON_INICIO_CANDIDATO <- "^\\s*\\d{4,5}\\s*[-:]?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ]" # cambiado 25 mayo  #  antes tenia: "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ]"
+    PATRON_ETIQUETAS        <- "(?i)(DNI|DOC|PAS\\bHC\\b|\\bFI\\b|FICM)"
 
+    PATRON_EXCLUIR <- "(?i)(?=.*epicrisis)(?=.*\\.docx?)"
+    
     es_inicio <- logical(n)
 
     for (i in seq_len(n)) {
-      if (stringr::str_detect(lineas[i], PATRON_INICIO_CANDIDATO)) {
-        # Ventana de validación: línea actual + 3 siguientes
-        ventana_fin <- min(i + 3, n)
-        ventana     <- paste(lineas[i:ventana_fin], collapse = " ")
-        # Es inicio real solo si la ventana contiene etiquetas
-        es_inicio[i] <- stringr::str_detect(ventana, PATRON_ETIQUETAS)
+      if (stringr::str_detect(lineas[i], PATRON_INICIO_CANDIDATO) &&
+          !stringr::str_detect(lineas[i], PATRON_EXCLUIR)) {
+        
+        tiene_epicrisis <- stringr::str_detect(lineas[i], "(?i)epicrisis")
+        ventana_fin     <- min(i + 3, n)
+        ventana         <- paste(lineas[i:ventana_fin], collapse = " ")
+        
+        if (tiene_epicrisis) {
+          # Si tiene epicrisis, las etiquetas deben estar en la MISMA línea
+          es_inicio[i] <- stringr::str_detect(lineas[i], PATRON_ETIQUETAS)
+        } else {
+          # Caso normal: etiquetas en ventana de 3 líneas
+          es_inicio[i] <- stringr::str_detect(ventana, PATRON_ETIQUETAS)
+        }
       }
     }
 
@@ -106,7 +116,19 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
   return(paste("Proceso finalizado. Archivos guardados en:", path_pacientes))
 }
 
-## --- c/ Claude 9 mayo --- tras chrash por uso excesivo de memoria 
+
+# 3 -------------------------------------------------------------------
+# herramienta
+
+# --- DNI HC FICM # sera usada dentro de fx evaluar pacientes    sacamos  FI
+extraer_dato_clinico <- function(texto, etiqueta) {
+  patron <- paste0("(?i)", etiqueta, "[:\\s]*([\\d/\\.]+)")
+  match <- stringr::str_match(texto, patron)
+  if (!is.na(match[1, 2])) return(stringr::str_trim(match[1, 2])) else return(NA_character_)
+}
+
+
+## 4 --- c/ Claude 9 mayo --- tras chrash por uso excesivo de memoria 
 
 evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
   
@@ -156,22 +178,42 @@ evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
       if (length(contenido) < 2) next
       
       linea_1       <- contenido[1]
-      n_cama_v      <- linea_1 %>% str_extract("^\\d{4}")
-      linea_sin_cama <- linea_1 %>% str_remove("^\\d{4}\\s*-?\\s*")
+      linea_1 <- linea_1 %>%    # agregado 25 mayo
+        str_trim() %>%                          # elimina sangría
+        str_replace("^(\\d{4,5})\\s*:", "\\1 -")  # "1234:" → "1234 -"   # se agrega ,5 porque alguno quedo mal o puede haber errores en los digitos de cama 25 mayo
+      
+      n_cama_v      <- linea_1 %>% str_extract("^\\d{4,5}")
+      linea_sin_cama <- linea_1 %>% str_remove("^\\d{4,5}\\s*-?\\s*")
       
       edad_raw <- linea_sin_cama %>% str_extract(PATTERN_EDAD_COMPLETO)
-      edad_v   <- if (!is.na(edad_raw)) as.integer(str_extract(edad_raw, "\\d{1,3}")) else NA_integer_
+      edad_v   <- if (!is.na(edad_raw)) {
+        edad_raw %>%
+          str_remove_all("(?<=\\d)\\s+(?=\\d)") %>%  # "6 4" → "64"
+          str_extract("\\d{1,3}") %>%
+          as.integer()
+      } else NA_integer_
       
       nombre_v <- linea_sin_cama %>%
+        str_remove("^\\s*:+\\s*") %>%
         str_extract(PATTERN_NOMBRE_STOP_COMPLETO) %>%
         str_remove_all("[-,]") %>%
+        str_remove_all("(?<=[a-zA-ZáéíóúÁÉÍÓÚÑñ])\\.(?=[a-zA-ZáéíóúÁÉÍÓÚÑñ ])") %>%  # punto entre letras
+        str_remove("\\s*\\d+.*$") %>%                                                    # número y todo lo que sigue
         str_remove("(?i)\\s*epicrisis\\s*\\.?\\s*docx?$") %>%
         str_remove("(?i)\\.docx?$") %>%
-        str_trim() %>% str_squish() %>% toupper()
+        #str_trim() %>% 
+        str_squish() %>% #str_squish() removes whitespace at the start and end, and replaces all internal whitespace with a single space
+        str_remove_all("\\.+$") %>%  # <-- punto(s) al final del string
+        toupper()
       
       bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
       dni_v <- { val <- extraer_dato_clinico(bloque_clinico, "DNI")
-      if (is.na(val) || is.null(val)) extraer_dato_clinico(bloque_clinico, "DOC") else val }
+      if (is.na(val) || is.null(val)) extraer_dato_clinico(bloque_clinico, "DOC") else val } 
+      dni_v <- { if (is.na(dni_v) || is.null(dni_v)) extraer_dato_clinico(bloque_clinico, "PAS") else dni_v } %>%
+        str_remove("^\\s*-\\s*") %>%   # elimina "-" al inicio
+        str_remove_all("[^0-9]") %>%  # se agrega con el PASaporte
+        str_extract("\\d{6,11}") # agarrar solo los numeros despues de la etiqueta, numeros de 6 a 11 digitos.. que es lo que vi que tiene de largo en gral
+      
       ficm_v <- extraer_dato_clinico(bloque_clinico, "FICM")
       
       texto_completo      <- tolower(paste(contenido, collapse = " "))
@@ -221,9 +263,7 @@ evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
     dplyr::left_join(mapa_origen, by = "archivo") %>%
     dplyr::relocate(origen, .after = archivo) %>%
     mutate(across(where(is.character), ~ str_replace_all(., ",", ".")),
-           edad = as.integer(edad))
-  
-  df_final <- df_final %>%
+           edad = as.integer(edad))%>%
     rowwise() %>%
     mutate(validacion_paciente = list(validar_paciente(cur_data()))) %>%
     unnest_wider(validacion_paciente)
@@ -231,149 +271,6 @@ evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
   return(df_final)
 }
 
-
-
-# 3 -------------------------------------------------------------------
-# herramienta
-
-# --- DNI HC FICM # sera usada dentro de fx evaluar pacientes    sacamos  FI
-extraer_dato_clinico <- function(texto, etiqueta) {
-  patron <- paste0("(?i)", etiqueta, "[:\\s]*([\\d/\\.]+)")
-  match <- stringr::str_match(texto, patron)
-  if (!is.na(match[1, 2])) return(stringr::str_trim(match[1, 2])) else return(NA_character_)
-}
-
-# 4 ----------- 
-# 
-# evaluar_pacientes <- function(path_pacientes) {
-#   
-#   # cargar mapa de origen 
-#   mapa_origen <- readr::read_csv(
-#     file.path(path_pacientes, "_mapa_origen.csv"),
-#     show_col_types = FALSE
-#   )
-#   
-#   pacientes_files <- list.files(path = path_pacientes, pattern = "\\.txt$", full.names = FALSE)
-#   # Add progress bar
-#   pb <- progress_bar$new(
-#     format = "  Evaluating [:bar] :current/:total (:percent) ETA: :eta",
-#     total = length(pacientes_files),
-#     clear = FALSE,
-#     width = 80
-#   )
-#   
-#   regex_exclusion <- PATTERN_EXCLUSION
-#   registro_inicial <- list() 
-#   
-#   for (p in pacientes_files) {
-#     pb$tick()  # Update progress
-#     ruta_origen <- file.path(path_pacientes, p)
-#     
-#     contenido <- read_lines(ruta_origen)
-#     if (length(contenido) < 2) next 
-#     
-#     # --- Extracción de Identidad ---
-#     linea_1 <- contenido[1]
-#     
-#     n_cama_v <-  linea_1 %>% str_extract("^\\d{4}") # str_extract("^\\d{4}\\s*[-]?\\s*")
-#     
-#     # 2. Remove bed number from line to avoid confusion
-#     linea_sin_cama <- linea_1 %>% str_remove("^\\d{4}\\s*-?\\s*")
-#     
-#     # 3. Extract age pattern from cleaned line
-#     edad_raw <- linea_sin_cama %>%
-#       str_extract(PATTERN_EDAD_COMPLETO)
-#     
-#     edad_v <- if (!is.na(edad_raw)) {
-#       as.integer(str_extract(edad_raw, "\\d{1,3}"))} else {NA_integer_}
-#     
-#     nombre_v <- linea_sin_cama %>%
-#       str_extract(PATTERN_NOMBRE_STOP_COMPLETO) %>%
-#       str_remove_all("[-,]") %>%
-#       str_remove("(?i)\\s*epicrisis\\s*\\.?\\s*docx?$") %>%
-#       str_remove("(?i)\\.docx?$") %>%
-#       str_trim() %>%
-#       str_squish() %>%
-#       toupper()
-#     
-#     # --- Datos Clínicos (Líneas 1-5) ---
-#     bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
-#    # dni_v  <- extraer_dato_clinico(bloque_clinico, "DNI|DOC")
-#     dni_v <- {
-#       val <- extraer_dato_clinico(bloque_clinico, "DNI")
-#       if (is.na(val) || is.null(val)) extraer_dato_clinico(bloque_clinico, "DOC") else val
-#     }
-#     #hc_v   <- extraer_dato_clinico(bloque_clinico, "HC")
-#     ficm_v <- extraer_dato_clinico(bloque_clinico, "FICM")
-#     
-#     # --- Exclusiones y Laboratorio ---
-#     texto_completo <- tolower(paste(contenido, collapse = " "))
-#     hallazgo_exclusion <- str_extract(texto_completo, regex_exclusion)
-#     
-#     hallazgo_normalizado <- case_when(
-#       str_detect(hallazgo_exclusion, regex(PATTERN_EMBARAZO,  ignore_case = TRUE)) ~ "embarazo",
-#       str_detect(hallazgo_exclusion, regex(PATTERN_GESTACION, ignore_case = TRUE)) ~ "embarazo",
-#       str_detect(hallazgo_exclusion, regex(PATTERN_HEMORRAGIA,ignore_case = TRUE)) ~ "hemorragia",
-#       str_detect(hallazgo_exclusion, regex(PATTERN_POLITRAUMA,ignore_case = TRUE)) ~ "traumatismo",
-#       str_detect(hallazgo_exclusion, regex(PATTERN_TRAUMA,    ignore_case = TRUE)) ~ "traumatismo",
-#       TRUE ~ NA_character_
-#     )
-# 
-#     
-#     # --- Clasificación ---
-#     comentario_v <- case_when(
-#       !is.na(edad_v) & edad_v < 18                ~ "< 18 años",
-#       !is.na(hallazgo_normalizado)               ~ hallazgo_normalizado,
-#       TRUE                                        ~ "sigue"
-#     )
-#     
-#     # Almacenar en lista
-#     registro_inicial[[p]] <- tibble(
-#       archivo = p,
-#       cama = n_cama_v,
-#       nombre = nombre_v,    # cuando publiquemos hay que borrar esta variable de nobmre
-#       edad = edad_v, 
-#       dni = dni_v, 
-#      # nro_hc = hc_v, 
-#       fi_clinica_medica = ficm_v,
-#       comentario = comentario_v
-#     )
-#     } # Cierre del bucle for
-#   
-#     # 2. Consolidar 
-#     df_final <- bind_rows(registro_inicial) %>%
-#    
-#      # incorporar origen y posicionarlo segundo
-#     dplyr::left_join(mapa_origen, by = "archivo") %>%
-#     dplyr::relocate(origen, .after = archivo) %>%
-#     
-#     # 21 abril: investigadora indica no deduplicar, que traiga todo
-#     #distinct(nombre, dni, f_internacion, fi_clinica_medica, hb_inicial, .keep_all = TRUE) %>%
-#     
-#     # Reemplazo de comas por puntos en columnas de texto
-#     mutate(across(where(is.character), ~ str_replace_all(., ",", "."))) %>%
-#     # Aseguramos que hb_inicial sea numérica
-#     mutate(#hb_inicial = as.numeric(hb_inicial),
-#            edad = as.integer(edad))
-#   
-#   ### agrega validaciones
-#   df_final <- df_final %>%
-#     rowwise() %>%
-#     mutate(validacion_paciente = list(validar_paciente(cur_data()))) %>%
-#     unnest_wider(validacion_paciente)
-#   
-#   # Add validation summary to report
-#   validation_summary <- df_final %>%
-#     summarise(
-#       total_pacientes = n(),
-#       con_issues = sum(!validacion_edad_dni),
-#       edad_invalida = sum(str_detect(validacion_issues, "Edad")),
-#       dni_invalido = sum(str_detect(validacion_issues, "DNI"))
-#     )
-#   #### 
-#   
-#   return(df_final)
-# }
 
 # 5 --------------------------------------------------------------------------
 

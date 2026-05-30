@@ -25,8 +25,8 @@ validar_edad <- function(edad) {
 # }
 
 validar_dni <- function(dni) {
-  # DNI en Argentina: 7-8 dígitos
-  es_numerico <- !is.na(dni) && str_detect(dni, "^\\d{7,8}$")
+  # DNI en Argentina: 7-10 dígitos
+  es_numerico <- !is.na(dni) && str_detect(dni, "^\\d{7,10}$")
   list(
     es_valido = es_numerico,
     mensaje = if_else(es_numerico, "OK", "revisar DNI")

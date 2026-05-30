@@ -2,9 +2,9 @@
 CONFIG <- list(
   # Paths
   paths = list(
-    proyecto = "D:/Archivos Anemias", # donde esta todo
-    word = "D:/Archivos Anemias/", # donde estan los .doc
-    txt = "D:/Archivos Anemias/archivos_txt" # crear carpeta donde ponga los archivotes txt
+    proyecto = "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/pruevaV3",            # "D:/Archivos Anemias", # donde esta todo
+    word = "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/pruevaV3/",               # "D:/Archivos Anemias/", # donde estan los .doc
+    txt = "C:/Users/luisa/OneDrive/Desktop/sup_PEDRIVE/pruevaV3/archivos_txt"    #  "D:/Archivos Anemias/archivos_txt" # crear carpeta donde ponga los archivotes txt
   ),
   
   # Extraction parameters

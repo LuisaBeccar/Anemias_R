@@ -23,7 +23,7 @@ PATTERN_NOMBRE_STOP <- list(
   dash_age = "\\s*-\\s*\\d{1,3}(?:\\s|$)",        # "- 72"
   fields = "\\s+(?:DNI|HC|FI)\\b",                 # " DNI" " HC" " FI"
   end = "$",                                          # end of line
-  antes_dni    = "\\s+\\d{1,3}(?=\\s+DNI)"   # " 72 DNI"
+  antes_dni    = "\\s+\\d{1,3}(?=\\s+DNI|DOC|PAS)"   # " 72 DNI"  # DOC Y PAS 30 MAYO
 )
 
 PATTERN_NOMBRE_STOP_COMPLETO <- paste0(
