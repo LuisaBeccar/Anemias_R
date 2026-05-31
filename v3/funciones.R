@@ -54,9 +54,10 @@ segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
     # 1. Empieza con 4 dígitos seguidos de texto alfabético (patrón original)
     # 2. Y dentro de las 3 líneas siguientes aparece al menos una etiqueta clínica
 
-    PATRON_INICIO_CANDIDATO <- "^\\s*\\d{4,5}\\s*[-:]?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ]" # cambiado 25 mayo  #  antes tenia: "^\\d{4}\\s*-?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ]"
-    PATRON_ETIQUETAS        <- "(?i)(DNI|DOC|PAS\\bHC\\b|\\bFI\\b|FICM)"
-
+   
+    PATRON_INICIO_CANDIDATO <- "^\\s*\\d{4,5}\\s*[-:]?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ]"
+    PATRON_ETIQUETAS        <- "(?i)(\\bDNI\\b|\\bDOC\\b|\\bPAS\\b|\\bHC\\b|\\bFI\\b|\\bFICM\\b)"  # 31 mayo
+    
     PATRON_EXCLUIR <- "(?i)(?=.*epicrisis)(?=.*\\.docx?)"
     
     es_inicio <- logical(n)
@@ -130,8 +131,9 @@ extraer_dato_clinico <- function(texto, etiqueta) {
 
 ## 4 --- c/ Claude 9 mayo --- tras chrash por uso excesivo de memoria 
 
-evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
-  
+# evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
+evaluar_pacientes <- function(path_pacientes, batch_size = 3000){
+
   mapa_origen <- readr::read_csv(
     file.path(path_pacientes, "_mapa_origen.csv"),
     show_col_types = FALSE
@@ -242,15 +244,23 @@ evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
         fi_clinica_medica = ficm_v,
         comentario = comentario_v
       )
-    } # fin loop pacientes del batch
     
-    # Guardar batch a disco y liberar RAM
-    saveRDS(bind_rows(registro_batch), batch_file)
-    rm(registro_batch)
-    gc()
-    message(sprintf("  [Batch %d/%d] ✅ Guardado en disco.", b, n_batches))
-    
-  } # fin loop batches
+  } # fin loop pacientes del batch   ← acá cierra el for(p in grupos[[b]])
+  
+  # Validación y guardado — FUERA del loop de pacientes
+  registro_batch_df <- bind_rows(registro_batch) %>%
+    mutate(validacion_paciente = purrr::pmap(
+      list(cama = cama, nombre = nombre, edad = edad, dni = dni),
+      ~ validar_paciente(list(cama = ..1, nombre = ..2, edad = ..3, dni = ..4))
+    )) %>%
+    unnest_wider(validacion_paciente)
+  
+  saveRDS(registro_batch_df, batch_file)
+  rm(registro_batch, registro_batch_df)
+  gc()
+  message(sprintf("  [Batch %d/%d] ✅ Guardado en disco.", b, n_batches))
+ 
+   } # fin loop batches
   
   # --- Combinar todos los batches ---
   message("\n  Combinando batches...")
@@ -258,15 +268,21 @@ evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
                             full.names = TRUE)
   batch_files <- batch_files[order(batch_files)]  # orden numérico
   
+  # df_final <- purrr::map(batch_files, readRDS) %>%
+  #   bind_rows() %>%
+  #   dplyr::left_join(mapa_origen, by = "archivo") %>%
+  #   dplyr::relocate(origen, .after = archivo) %>%
+  #   mutate(across(where(is.character), ~ str_replace_all(., ",", ".")),
+  #          edad = as.integer(edad)) %>%
+  #   rowwise() %>%
+  #   mutate(validacion_paciente = list(validar_paciente(pick(everything())))) %>%  # <-- fix
+  #   unnest_wider(validacion_paciente)
   df_final <- purrr::map(batch_files, readRDS) %>%
     bind_rows() %>%
     dplyr::left_join(mapa_origen, by = "archivo") %>%
     dplyr::relocate(origen, .after = archivo) %>%
     mutate(across(where(is.character), ~ str_replace_all(., ",", ".")),
-           edad = as.integer(edad))%>%
-    rowwise() %>%
-    mutate(validacion_paciente = list(validar_paciente(cur_data()))) %>%
-    unnest_wider(validacion_paciente)
+           edad = as.integer(edad))
   
   return(df_final)
 }
