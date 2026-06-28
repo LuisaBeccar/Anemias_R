@@ -1,0 +1,470 @@
+library(dplyr)
+
+# 1 -----------------------------------------------------------
+docx_a_txt <- function (ruta_archivos_docx, ruta_destino_txt) {
+  if (!dir.exists(ruta_destino_txt)) dir.create(ruta_destino_txt)
+  
+  datos_word <- readtext(paste0(ruta_archivos_docx, "*.docx"))   # Leer todos los archivos .docx de una sola vez
+  
+  for (i in 1:nrow(datos_word)) {        # 2. Guardar cada uno como .txt          # Usamos un loop rápido solo para la escritura en disco
+    nombre_archivo <- str_replace(datos_word$doc_id[i], "\\.docx$", ".txt")       # Limpiar el nombre: quitar .docx y poner .txt
+    write_lines(datos_word$text[i], file.path(ruta_destino_txt, nombre_archivo))  # Escribir el contenido en la carpeta de destino
+  }
+}
+
+# 2 ----------------------------------------------------------
+segmentar_pacientes <- function(path_proyecto, path_pacientes, path_excluidos) {
+  
+  if (!dir.exists(path_pacientes)) dir.create(path_pacientes, recursive = TRUE)
+  if (!dir.exists(path_excluidos)) dir.create(path_excluidos, recursive = TRUE)
+  
+  archivos_pendrive <- list.files(path = path_proyecto, pattern = "\\.txt$", full.names = TRUE)
+  
+  if (length(archivos_pendrive) == 0) {
+    stop("No se encontraron archivos .txt en la ruta especificada.")
+  }
+  
+  # Acumula el mapeo archivo -> origen a lo largo de todos los .txt procesados
+  mapa_origen <- tibble::tibble(archivo = character(), origen = character())
+  
+  #  contador global de pacientes
+  contador_global <- 0L
+  #
+  
+  pb_seg <- progress_bar$new(
+    format = "  Segmenting [:bar] :current/:total files",
+    total = length(archivos_pendrive),
+    clear = FALSE
+  )
+  
+  for (archivo_txt in archivos_pendrive) {
+    pb_seg$tick()
+    
+    # Nombre del .txt fuente (sin ruta) — esto es el "origen"
+    nombre_origen <- basename(archivo_txt)
+    
+    temp_data <- readr::read_delim(archivo_txt, delim = "\n", col_names = "X1",
+                                   show_col_types = FALSE, quote = "")
+    
+    lineas <- temp_data$X1
+    n <- length(lineas)
+    
+    # --- NUEVA LÓGICA DE DETECCIÓN ---
+    # Una línea es inicio de paciente si:
+    # 1. Empieza con 4o 5 dígitos seguidos de texto alfabético (patrón original)
+    # 2. Y dentro de las 3 líneas siguientes aparece al menos una etiqueta clínica
+    
+    PATRON_INICIO_CANDIDATO <- "^\\s*\\d{4,5}\\s*[-:]?\\s*[a-zA-ZáéíóúÁÉÍÓÚÑñ]"
+    PATRON_ETIQUETAS        <- "(?i)(\\bDNI\\b|\\bDOC\\b|\\bPAS\\b|\\bHC\\b|\\bFI\\b|\\bFICM\\b)"
+    
+    PATRON_EXCLUIR <- "(?i)(?=.*epicrisis)(?=.*\\.docx?)"
+    
+    es_inicio <- logical(n)
+    
+    for (i in seq_len(n)) {
+      if (stringr::str_detect(lineas[i], PATRON_INICIO_CANDIDATO) &&
+               !stringr::str_detect(lineas[i], PATRON_EXCLUIR)) {
+        
+        tiene_epicrisis <- stringr::str_detect(lineas[i], "(?i)epicrisis")
+        ventana_fin     <- min(i + 3, n)
+        ventana         <- paste(lineas[i:ventana_fin], collapse = " ")
+        
+        if (tiene_epicrisis) {
+          # Si tiene epicrisis, las etiquetas deben estar en la MISMA línea
+          es_inicio[i] <- stringr::str_detect(lineas[i], PATRON_ETIQUETAS)
+        } else {
+          # Caso normal: etiquetas en ventana de 3 líneas
+          es_inicio[i] <- stringr::str_detect(ventana, PATRON_ETIQUETAS)
+        }
+      }
+    }
+    
+    df_segmentado <- temp_data %>%
+      dplyr::mutate(
+        es_inicio = es_inicio,
+        #   suma el offset global para que la numeración sea continua ──
+        id_paciente_unico = cumsum(es_inicio) + contador_global,
+        #
+        indice_str = sprintf("%05d", id_paciente_unico),
+        nombre_archivo = paste0(indice_str, ".txt")
+      ) %>%
+      # ✅ NUEVO: descarta todo lo que aparece antes del primer paciente detectado
+      dplyr::filter(id_paciente_unico > contador_global)
+    
+    num_pacientes <- length(unique(df_segmentado$nombre_archivo))
+    message(paste("Archivo:", nombre_origen, "| Pacientes detectados:", num_pacientes))
+    
+    df_segmentado %>%
+      dplyr::group_split(nombre_archivo) %>%
+      purrr::walk(~ readr::write_lines(.x$X1, file.path(path_pacientes, unique(.x$nombre_archivo))))
+    
+    archivos_generados <- unique(df_segmentado$nombre_archivo)
+    mapa_origen <- dplyr::bind_rows(mapa_origen,
+                                    tibble::tibble(archivo = archivos_generados, origen = nombre_origen))
+    
+    # actualizar el contador con los pacientes de esta iteración ──
+    contador_global <- contador_global + sum(es_inicio)
+    #
+    
+    message(paste("Completado:", nombre_origen))
+  }
+  
+  # Guardar el mapa como CSV en path_pacientes
+  readr::write_csv(mapa_origen, file.path(path_pacientes, "_mapa_origen.csv"))
+  message(paste("Mapa de origen guardado en:", file.path(path_pacientes, "_mapa_origen.csv")))
+  
+  return(paste("Proceso finalizado. Archivos guardados en:", path_pacientes))
+}
+
+# 3 -------------------------------------------------------------------
+
+# herramientas
+
+# --- DNI HC FI FICM # sera usada dentro de fx evaluar pacientes 
+extraer_dato_clinico <- function(texto, etiqueta) {
+  patron <- paste0("(?i)", etiqueta, "[:\\s]*([\\d/\\.]+)")
+  match <- stringr::str_match(texto, patron)
+  if (!is.na(match[1, 2])) return(stringr::str_trim(match[1, 2])) else return(NA_character_)
+}
+
+
+# --- Hemoglobina inicial  # sera usada dentro de fx evaluar pacientes 
+extraer_hb_inicial <- function(contenido, idx_lab) {
+  # 1. Validación de seguridad inicial
+  if (is.na(idx_lab) || idx_lab >= length(contenido)) {
+    return(list(valor = NA_real_, fecha = NA_character_))
+  }
+  
+  # 2. Definir ventana de búsqueda (10 líneas)
+  limite_superior <- min(idx_lab + 10, length(contenido))
+  rango_busqueda <- (idx_lab + 1):limite_superior
+  
+  for (i in rango_busqueda) {
+    linea_lab <- contenido[i]
+    
+    # 3. Detectar línea con formato Fecha: Datos
+    if (stringr::str_detect(linea_lab, "^\\d{1,2}/\\d{1,2}:")) {
+      
+      # Extraer la fecha
+      fecha_detectada <- stringr::str_extract(linea_lab, "^\\d{1,2}/\\d{1,2}")
+      
+      # Limpiar la línea y dividir por "/"
+      datos_puros <- stringr::str_remove(linea_lab, "^\\d{1,2}/\\d{1,2}:") %>% 
+        stringr::str_trim()
+      
+      partes <- stringr::str_split_1(datos_puros, "/")
+      
+      # 4. Evaluar la segunda posición (índice 2)
+      if (length(partes) >= 2) {
+        # Extraer solo el número (soporta decimales)
+        valor_candidato <- as.numeric(stringr::str_extract(partes[2], "\\d+\\.?\\d*"))
+        
+        # Validación de rango clínico (Hemoglobina válida entre 3 y 45)
+        if (!is.na(valor_candidato) && valor_candidato >= 3.0 && valor_candidato <= 24.0) {   # 27 junio esto estaba mal decia 45 
+          return(list(valor = valor_candidato, fecha = fecha_detectada))
+        }
+      }
+    }
+    
+    # 5. Parada de emergencia: si hay línea vacía o nueva sección con "Texto:"
+    if (linea_lab == "" || stringr::str_detect(linea_lab, "^[A-Z][a-z]+:")) {
+      break
+    }
+  }
+  
+  # Si recorre todo el rango y no encuentra nada, devuelve NA
+  return(list(valor = NA_real_, fecha = NA_character_))
+}
+
+
+# 4 ----------- s
+
+evaluar_pacientes <- function(path_pacientes, batch_size = 1000) {
+  
+  mapa_origen <- readr::read_csv(
+    file.path(path_pacientes, "_mapa_origen.csv"),
+    show_col_types = FALSE
+  )
+  
+  pacientes_files <- list.files(path = path_pacientes, pattern = "^\\d+\\.txt$", full.names = FALSE)
+  
+  
+  # --- Directorio de batches ---
+  path_batches <- file.path(path_pacientes, "_batches")
+  if (!dir.exists(path_batches)) dir.create(path_batches)
+  
+  # Dividir en grupos de batch_size
+  indices     <- seq_along(pacientes_files)
+  grupos      <- split(pacientes_files, ceiling(indices / batch_size))
+  n_batches   <- length(grupos)
+  # Resolver patrón de exclusión una vez antes del loop (evita búsqueda global en cada iteración)
+  regex_exclusion <- PATTERN_EXCLUSION
+  
+  for (b in seq_len(n_batches)) {
+    
+    batch_file <- file.path(path_batches, sprintf("batch_%04d.rds", b))
+    
+    # ✅ Si el batch ya existe, saltarlo (permite retomar tras crash)
+    if (file.exists(batch_file)) {
+      message(sprintf("  [Batch %d/%d] Ya procesado, saltando...", b, n_batches))
+      next
+    }
+    
+    message(sprintf("\n  [Batch %d/%d] Procesando %d archivos...", b, n_batches, length(grupos[[b]])))
+    
+  # Add progress bar
+  pb <- progress_bar$new(
+    format = "  Evaluating [:bar] :current/:total (:percent) ETA: :eta",
+    total = length(grupos[[b]]),
+    clear = FALSE,
+    width = 80
+  )
+  
+  registro_batch <- list()
+  
+  for (p in grupos[[b]]) {
+    pb$tick()
+    ruta_origen <- file.path(path_pacientes, p)
+    contenido   <- read_lines(ruta_origen)
+    if (length(contenido) < 2) next
+    
+    linea_1       <- contenido[1]
+    linea_1 <- linea_1 %>%    # agregado 25 mayo
+      str_trim() %>%                          # elimina sangría
+      str_replace("^(\\d{4,5})\\s*:", "\\1 -")  # "1234:" → "1234 -"   # se agrega ,5 porque alguno quedo mal o puede haber errores en los digitos de cama 25 mayo
+    
+    n_cama_v      <- linea_1 %>% str_extract("^\\d{4,5}")
+    linea_sin_cama <- linea_1 %>% str_remove("^\\d{4,5}\\s*-?\\s*")
+    
+    edad_raw <- linea_sin_cama %>% str_extract(PATTERN_EDAD_COMPLETO)
+    edad_v   <- if (!is.na(edad_raw)) {
+      edad_raw %>%
+        #str_remove_all("(?<=\\d)\\s+(?=\\d)") %>%  # "6 4" → "64"
+        str_remove_all("\\s+") %>%
+        str_extract("\\d{1,3}") %>%
+        as.integer()
+    } else NA_integer_
+    
+   
+     nombre_v <- linea_sin_cama %>%
+       str_remove("^\\s*:+\\s*") %>%
+       str_extract(PATTERN_NOMBRE_STOP_COMPLETO) %>%
+       str_remove_all("[-,]") %>%
+       str_remove_all("(?<=[a-zA-ZáéíóúÁÉÍÓÚÑñ])\\.(?=[a-zA-ZáéíóúÁÉÍÓÚÑñ ])") %>%  # punto entre letras
+       str_remove("\\s*\\d+.*$") %>%                                                    # número y todo lo que sigue
+       str_remove("(?i)\\s*epicrisis\\s*\\.?\\s*docx?$") %>%
+       str_remove("(?i)\\.docx?$") %>%
+       str_remove_all("\\.+$") %>%          # <-- punto(s) al final del string
+       str_trim() %>% str_squish() %>% toupper()
+    
+    # --- Datos Clínicos (Líneas 1-5) ---
+    bloque_clinico <- paste(contenido[1:min(5, length(contenido))], collapse = " ")
+    
+    dni_v <- { val <- extraer_dato_clinico(bloque_clinico, "DNI")
+    if (is.na(val) || is.null(val)) extraer_dato_clinico(bloque_clinico, "DOC") else val } 
+    dni_v <- { if (is.na(dni_v) || is.null(dni_v)) extraer_dato_clinico(bloque_clinico, "PAS") else dni_v } %>%
+      str_remove("^\\s*-\\s*") %>%   # elimina "-" al inicio
+      str_remove_all("[^0-9]") %>%  # se agrega con el PASaporte
+      str_extract("\\d{6,11}") # agarrar solo los numeros despues de la etiqueta, numeros de 6 a 11 digitos.. que es lo que vi que tiene de largo en gral
+      
+    hc_v <- extraer_dato_clinico(bloque_clinico, "HC") %>% str_remove_all("[^0-9]")
+    
+    fi_v <- extraer_dato_clinico(bloque_clinico, "FI") 
+    
+    ficm_v <- extraer_dato_clinico(bloque_clinico, "FICM") 
+    
+    # --- Exclusiones y Laboratorio ---
+    texto_completo <- tolower(paste(contenido, collapse = " "))
+    hallazgo_exclusion <- str_extract(texto_completo, regex_exclusion)
+    
+    hallazgo_normalizado <- case_when(
+      str_detect(hallazgo_exclusion, regex(PATTERN_EMBARAZO,  ignore_case = TRUE)) ~ "embarazo",
+      str_detect(hallazgo_exclusion, regex(PATTERN_GESTACION, ignore_case = TRUE)) ~ "embarazo",
+      str_detect(hallazgo_exclusion, regex(PATTERN_HEMORRAGIA,ignore_case = TRUE)) ~ "hemorragia",
+      str_detect(hallazgo_exclusion, regex(PATTERN_POLITRAUMA,ignore_case = TRUE)) ~ "traumatismo",
+      str_detect(hallazgo_exclusion, regex(PATTERN_TRAUMA,    ignore_case = TRUE)) ~ "traumatismo",
+      TRUE ~ NA_character_
+    )
+    
+    idx_lab <- which(str_detect(contenido, regex("laboratorios:", ignore_case = TRUE)))[1]
+    res_hb <- extraer_hb_inicial(contenido, idx_lab)
+    
+    # --- Clasificación ---
+    comentario_v <- case_when(
+      !is.na(edad_v) & edad_v < 18                ~ "< 18 años",
+      !is.na(hallazgo_normalizado)               ~ hallazgo_normalizado,
+      !is.na(res_hb$valor) & res_hb$valor < 12.0  ~ "anemia basal",
+      is.na(res_hb$valor)                         ~ "falta hb inicial",
+      !is.na(res_hb$valor) & res_hb$valor >= 12.0 & res_hb$valor < 13.0 ~ "evaluar sexo",
+      TRUE                                        ~ "sigue"
+    )
+    
+    # Almacenar en lista
+    registro_batch[[p]] <- tibble(
+      archivo = p,
+      cama = n_cama_v,
+      nombre = nombre_v,    # cuando publiquemos hay que borrar esta variable de nobmre
+      edad = edad_v, 
+      dni = dni_v, 
+      nro_hc = hc_v, 
+      f_internacion = fi_v, 
+      fi_clinica_medica = ficm_v,
+      f_hb_inicial = res_hb$fecha, 
+      hb_inicial = res_hb$valor, 
+      comentario = comentario_v
+    )
+  } # fin loop pacientes del batch
+  
+  # Guardar batch a disco y liberar RAM
+  saveRDS(bind_rows(registro_batch), batch_file)
+  rm(registro_batch)
+  gc()
+  message(sprintf("  [Batch %d/%d] ✅ Guardado en disco.", b, n_batches))
+  
+  } # fin loop batches
+  
+  # --- Combinar todos los batches ---
+  message("\n  Combinando batches...")
+  
+  batch_files <- list.files(path_batches, pattern = "^batch_\\d+\\.rds$",
+                            full.names = TRUE)
+  batch_files <- batch_files[order(batch_files)]  # orden numérico
+  
+  df_final <- purrr::map(batch_files, readRDS) %>%
+    bind_rows() %>%
+    dplyr::left_join(mapa_origen, by = "archivo") %>%
+    dplyr::relocate(origen, .after = archivo) %>%
+    mutate(across(where(is.character), ~ str_replace_all(., ",", ".")),
+           edad = as.integer(edad))%>%
+    rowwise() %>%
+    mutate(validacion_paciente = list(validar_paciente(pick(everything())))) %>%  # <-- fix
+    unnest_wider(validacion_paciente)
+  
+  # Add validation summary to report
+  validation_summary <- df_final %>%
+    summarise(
+      total_pacientes = n(),
+      con_issues = sum(!validacion_ok),
+      edad_invalida = sum(str_detect(replace_na(validacion_issues, ""), "Edad")),
+      hb_invalida   = sum(str_detect(replace_na(validacion_issues, ""), "HB")),
+      dni_invalido  = sum(str_detect(replace_na(validacion_issues, ""), "DNI"))
+    )
+  #### 
+  
+  return(df_final)
+}
+
+# 5 --------------------------------------------------------------------------
+solicitar_sexo <- function(tabla) {
+  # 1. Preparar columna sexo si no existe
+  if (!"sexo" %in% names(tabla)) {
+    tabla <- tabla %>% dplyr::mutate(sexo = NA_character_)
+  }
+  
+  # 2. Bucle interactivo
+  casos_evaluar <- which(tabla$comentario == "evaluar sexo")
+  
+  if (length(casos_evaluar) > 0) {
+    message("\n>>> SE REQUIERE SABER EL SEXO DE ", length(casos_evaluar), " CASOS <<<\n")
+    
+    for (i in casos_evaluar) {
+      mensaje <- paste0("¿Es ", tabla$nombre[i], " de sexo MASCULINO? (Y/N): ")
+      respuesta <- readline(prompt = mensaje)
+      
+      if (toupper(respuesta) == "Y") {tabla$sexo[i] <- "M"
+      } else if (toupper(respuesta) == "N") { tabla$sexo[i] <- "F"
+      } else {
+        message("Respuesta no válida para ", tabla$nombre[i], ". Se mantiene como NA.")
+      }
+    }
+    cat("\n--------------------------------------------------------------\n")
+    cat("Gracias por completar la revisión manual. Continuando análisis...")
+    cat("\n--------------------------------------------------------------\n")
+  }
+  
+  # 3. Lógica de reclasificación vectorizada
+  tabla_procesada <- tabla %>% 
+    dplyr::mutate(
+      comentario = dplyr::case_when(
+        sexo == "M" & comentario == "evaluar sexo" ~ "anemia basal",
+        sexo == "F" & comentario == "evaluar sexo" ~ "sigue",
+        TRUE                                       ~ comentario ),
+      decision = dplyr::if_else(comentario != "sigue","EXCLUIR", "CONTINUAR")) %>%   # asi los vacios continuan tambien
+    dplyr::relocate(sexo, comentario, .after = hb_inicial) %>% 
+    dplyr::relocate(decision, .after = dplyr::last_col())
+  
+  return(tabla_procesada)  ## esta es la que se analizara en analisis.R y formara parte del reporte final
+}
+
+# 6 --------------------------------------------------------------------------
+organizar_archivos <- function(tabla, path_pacientes, path_excluidos) {
+  # Filtrar solo los que deben ser excluidos
+  archivos_a_excluir <- tabla %>% 
+    dplyr::filter(decision == "EXCLUIR") %>% 
+    dplyr::pull(archivo)
+  
+  if (length(archivos_a_excluir) == 0) {
+    message("No hay archivos nuevos para excluir.")
+    return(invisible(NULL))
+  }
+  
+  for (f in archivos_a_excluir) {
+    ruta_origen <- file.path(path_pacientes, f)
+    ruta_destino <- file.path(path_excluidos, f)
+    
+    if (file.exists(ruta_origen)) {
+      success <- file.rename(ruta_origen, ruta_destino)
+      if (success) {
+        message(paste("Movido a Excluidos:", f))
+      } else {
+        warning(paste("No se pudo mover el archivo:", f))
+      }
+    }
+  }
+}
+
+# 7 --------------------------------------------------------------------------
+
+# despues de corregir o agregar sexos en google sheets, se volvio a cargar el csv y analizo denuevo anemias
+
+revision_tabla <- function(tabla) {
+
+  tabla_procesada <- tabla %>% 
+    dplyr::mutate(
+      # 1. Determinamos si TIENE anemia según el sexo recién completado en el csv sheets
+      # en nueva columna que sera temporal
+                  motivo_anemia = dplyr::case_when(
+                    sexo == "F" & hb_inicial < 12 ~ "anemia basal",
+                    sexo == "M" & hb_inicial < 13 ~ "anemia basal",
+                    TRUE                          ~ "sigue" ),
+      
+      # 2. Lógica de pegado inteligente (comentario_3)
+      # esta complicado pero creo q cumple
+                  comentario = dplyr::case_when(
+                    # Caso A: Ya decía anemia basal y el nuevo cálculo confirma anemia basal -> No cambia
+                    comentario == "evaluar sexo" & motivo_anemia == "anemia basal" ~ paste(comentario, "--> anemia basal"),
+                    
+                    # Caso C: Tenía otro motivo (ej: "< 18") y además es anemia -> Los pega
+                    comentario != "sigue" & comentario != "evaluar sexo" & motivo_anemia == "anemia basal" & !str_detect(comentario, "anemia") ~ 
+                      paste(comentario, "anemia basal", sep = " y "), # agrego que ademas de la causa clinica o edad tiene anemia basal
+                    
+                    # Caso D: En cualquier otro caso, mantenemos el comentario original
+                    TRUE ~ comentario )
+                  ) %>% 
+    # 3. Limpieza y actualización de decisión
+    #dplyr::mutate(comentario_2 = comentario_3) %>% 
+    dplyr::select(-motivo_anemia) %>%  # , -comentario_3  queda comentario y comentario_2 // mute comentario por comentario2
+    dplyr::mutate(decision = dplyr::if_else(comentario == "sigue", "CONTINUAR", "EXCLUIR")) %>%   # rechequeo la decision
+    # 4. Reorganización estética
+    dplyr::relocate(sexo, .after = hb_inicial) %>% 
+    dplyr::relocate(comentario, .after = sexo) %>% 
+    dplyr::relocate(decision, .after = dplyr::last_col()) %>% 
+    mutate(
+      edad = as.integer(edad),
+      hb_inicial = as.numeric(hb_inicial))
+  
+  return(tabla_procesada)
+}
+
+####################
+
