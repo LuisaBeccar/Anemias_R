@@ -71,7 +71,7 @@ manual <- m_manual %>%
 
 
 nrow(v2) #434
-table(v2$decision) # C133 E301
+table(v2$decision) # C128 E306
 
 nrow(manual) #435
 table(manual$decision) # C180 E255
